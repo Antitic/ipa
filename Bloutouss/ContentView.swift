@@ -130,12 +130,10 @@ struct DeviceRow: View {
     let now: Date
 
     private var signalColor: Color {
-        switch device.rssi {
-        case -60...: return .green
-        case -75 ..< -60: return .yellow
-        case -90 ..< -75: return .orange
-        default: return .red
-        }
+        if device.rssi >= -60 { return .green }
+        if device.rssi >= -75 { return .yellow }
+        if device.rssi >= -90 { return .orange }
+        return .red
     }
 
     var body: some View {
