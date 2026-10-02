@@ -4,12 +4,35 @@ Application iOS qui affiche en temps réel tous les appareils Bluetooth à proxi
 
 ## Fonctionnalités
 
-- Scan continu des appareils Bluetooth Low Energy (montres, écouteurs, balises, téléphones, objets connectés…)
-- Force du signal (RSSI) et estimation de la distance, mises à jour en direct
-- Identification du fabricant (Apple, Samsung, Google, Xiaomi…)
-- Recherche, tri (signal, nom, plus récents) et filtre des appareils sans nom
-- Fiche détaillée : graphique du signal, services annoncés, données fabricant/service brutes
-- Les appareils qui n'émettent plus sont grisés ; tirer la liste vers le bas pour la vider
+**Appareils**
+- Scan continu des appareils Bluetooth Low Energy, avec force du signal lissée et distance estimée
+- Reconnaissance automatique : AirPods/Beats (avec batterie des écouteurs et du boîtier), AirTag et accessoires Localiser, iPhone/Mac/Apple TV (Continuity), iBeacon, Eddystone (UID, URL, TLM), Google Fast Pair, Microsoft Swift Pair, Tile, Samsung SmartTag, RuuviTag (température, humidité, pression), capteurs cardiaques, claviers…
+- Recherche, tri (signal, nom, récents, durée de présence) et filtres (signal minimum, type, favoris, nommés, connectables, actifs)
+- Favoris et noms personnalisés, alerte quand un favori réapparaît
+- Liste des appareils déjà connectés à l'iPhone
+- Export CSV de la session
+
+**Fiche appareil**
+- Graphique du signal en direct, RSSI min/moyen/max
+- Analyse détaillée des annonces (protocoles, données fabricant et de service)
+
+**Connexion GATT**
+- Connexion à l'appareil, découverte des services et caractéristiques
+- Lecture, écriture (hex ou texte) et notifications en direct
+- Batterie, fabricant, modèle, numéros de série et versions lus automatiquement
+- Journal des échanges
+
+**Localiser**
+- Mode « détecteur » : jauge de proximité, tendance (rapprochement / éloignement), vibrations et son de plus en plus rapides
+
+**Radar**
+- Vue radar animée des appareils autour de vous (échelle de distance logarithmique)
+
+**Traqueurs**
+- Détection des AirTag séparés de leur propriétaire, Tile et SmartTag, avec alerte si un traqueur reste près de vous plus de 10 minutes
+
+**Réglages**
+- Calibrage de la distance, réactivité du signal, nettoyage automatique de la liste, vibrations, écran toujours allumé, statistiques
 
 ## Récupérer l'IPA
 
