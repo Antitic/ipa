@@ -1,0 +1,11 @@
+# Généré par XcodeGen
+Bloutouss.xcodeproj/
+Bloutouss/Info.plist
+
+# Build
+build/
+DerivedData/
+Payload/
+*.ipa
+xcuserdata/
+.DS_Store

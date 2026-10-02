@@ -1,0 +1,49 @@
+name: Bloutouss
+options:
+  bundleIdPrefix: com.antitic
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Bloutouss:
+    type: application
+    platform: iOS
+    sources:
+      - path: Bloutouss
+    info:
+      path: Bloutouss/Info.plist
+      properties:
+        CFBundleDisplayName: Bloutouss
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        NSBluetoothAlwaysUsageDescription: "Bloutouss utilise le Bluetooth pour détecter les appareils à proximité."
+        NSBluetoothPeripheralUsageDescription: "Bloutouss utilise le Bluetooth pour détecter les appareils à proximité."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.antitic.bloutouss
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+schemes:
+  Bloutouss:
+    build:
+      targets:
+        Bloutouss: all
+    run:
+      config: Debug
+    archive:
+      config: Release
