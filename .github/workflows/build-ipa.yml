@@ -49,8 +49,24 @@ jobs:
           name: Bloutouss-ipa
           path: Bloutouss.ipa
 
+      - name: Déterminer la version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publier la release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Bloutouss ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: Bloutouss.ipa
+          overwrite_files: true
+          body: |
+            IPA non signée de Bloutouss — scanner d'appareils Bluetooth à proximité.
+            Installez-la avec AltStore, Sideloadly ou TrollStore.

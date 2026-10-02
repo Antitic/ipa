@@ -16,7 +16,7 @@ Application iOS qui affiche en temps réel tous les appareils Bluetooth à proxi
 L'IPA est compilée automatiquement par GitHub Actions (workflow **Build IPA**) à chaque push :
 
 1. Onglet **Actions** du dépôt → dernier run de *Build IPA* → artefact **Bloutouss-ipa**.
-2. Pour une version publiée, poussez un tag `v*` (ex. `git tag v1.0.0 && git push --tags`) : l'IPA est jointe à la release GitHub.
+2. Chaque push publie aussi l'IPA dans la release GitHub `v<MARKETING_VERSION>` (définie dans `project.yml`) ; un tag `v*` publie une release du même nom.
 
 L'IPA n'est **pas signée**. Installez-la avec un outil de sideload qui la signe avec votre identifiant Apple :
 [AltStore](https://altstore.io), [Sideloadly](https://sideloadly.io), ou TrollStore si votre appareil le permet.
