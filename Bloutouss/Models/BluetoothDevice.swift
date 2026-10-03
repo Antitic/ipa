@@ -40,7 +40,6 @@ struct BluetoothDevice: Identifiable {
 
     var kind: DeviceKind { info.kind }
 
-    /// Nom annoncé, sinon produit identifié, sinon « Appareil inconnu ».
     /// Nom annoncé, sinon produit identifié, sinon type + identifiant court (jamais « inconnu » seul).
     var baseName: String {
         if let name { return name }
