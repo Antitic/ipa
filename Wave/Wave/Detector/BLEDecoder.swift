@@ -56,12 +56,18 @@ struct BLEDevice: Identifiable {
     var txPower: Int?
     var connectable: Bool = false
     var info = BLEInfo()
+    /// Nom lu en se connectant à l'appareil (il ne le diffuse pas lui-même).
+    var nameIsResolved = false
 
+    /// Jamais « Sans nom » : nom diffusé, sinon modèle ou marque reconnus,
+    /// sinon type d'appareil suivi d'un identifiant court pour les distinguer.
     var displayName: String {
         if let n = name, !n.isEmpty { return n }
         if let m = info.model { return m }
         if let b = info.brand { return "Appareil \(b)" }
-        return "Sans nom"
+        let short = String(id.uuidString.prefix(4))
+        if info.category != .unknown { return "\(info.category.rawValue) \(short)" }
+        return "Appareil \(short)"
     }
 
     var companyID: UInt16? {

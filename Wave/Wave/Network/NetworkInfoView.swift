@@ -1,5 +1,6 @@
 import SwiftUI
 import Network
+import Charts
 
 struct PublicIPInfo: Decodable {
     struct Connection: Decodable {
@@ -23,12 +24,6 @@ final class NetworkInfoModel: ObservableObject {
     @Published var cellular: NetInterface?
     @Published var publicInfo: PublicIPInfo?
     @Published var publicError = false
-    @Published var pings: [Double] = []
-    @Published var download: Double?
-    @Published var upload: Double?
-    @Published var testing = false
-    @Published var testPhase = ""
-
     private var monitor: NWPathMonitor?
 
     func start() {
@@ -60,76 +55,28 @@ final class NetworkInfoModel: ObservableObject {
         }
     }
 
-    func runTest() async {
-        guard !testing else { return }
-        testing = true
-        pings = []
-        download = nil
-        upload = nil
-
-        testPhase = "Latence…"
-        for _ in 0..<8 {
-            let start = Date()
-            let st = await NetUtil.probe("1.1.1.1", 443, timeout: 2)
-            if st == .open { pings.append(Date().timeIntervalSince(start) * 1000) }
-        }
-
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 20
-        cfg.timeoutIntervalForResource = 30
-        let session = URLSession(configuration: cfg)
-
-        testPhase = "Téléchargement…"
-        if let url = URL(string: "https://speed.cloudflare.com/__down?bytes=25000000") {
-            let start = Date()
-            if let result = try? await session.data(from: url) {
-                let data = result.0
-                let secs = Date().timeIntervalSince(start)
-                if secs > 0 { download = Double(data.count) * 8 / secs / 1_000_000 }
-            }
-        }
-
-        testPhase = "Envoi…"
-        if let url = URL(string: "https://speed.cloudflare.com/__up") {
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            let payload = Data(count: 8_000_000)
-            let start = Date()
-            if (try? await session.upload(for: req, from: payload)) != nil {
-                let secs = Date().timeIntervalSince(start)
-                if secs > 0 { upload = Double(payload.count) * 8 / secs / 1_000_000 }
-            }
-        }
-        testPhase = ""
-        testing = false
-    }
-
-    var pingAvg: Double? { pings.isEmpty ? nil : pings.reduce(0, +) / Double(pings.count) }
-    var jitter: Double? {
-        guard pings.count > 1 else { return nil }
-        var sum = 0.0
-        for i in 1..<pings.count { sum += abs(pings[i] - pings[i - 1]) }
-        return sum / Double(pings.count - 1)
-    }
 }
 
 struct NetworkInfoView: View {
     @StateObject private var model = NetworkInfoModel()
+    @StateObject private var speed = SpeedTest()
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                connectionCard
-                speedCard
-                publicCard
-                localCard
-                Text("Le nom du Wi‑Fi et sa puissance ne sont pas accessibles aux applis installées hors App Store sur iOS.")
-                    .font(.caption2).foregroundStyle(Theme.dim).padding(.horizontal, 4)
+        List {
+            connectionSection
+            speedSection
+            Section {
+                NavigationLink {
+                    NetworkToolsView()
+                } label: {
+                    Label("Outils réseau", systemImage: "wrench.and.screwdriver")
+                }
+            } footer: {
+                Text("Wake-on-LAN, ping, test de ports, recherche DNS, en-têtes HTTP.")
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            publicSection
+            localSection
         }
-        .waveScreen(.network)
         .navigationTitle("Réseau")
         .refreshable { await model.loadPublicIP() }
         .onAppear { model.start() }
@@ -143,87 +90,115 @@ struct NetworkInfoView: View {
         return ("Connecté", "network")
     }
 
-    private var isOnline: Bool { model.path?.status == .satisfied }
-
-    private var connectionCard: some View {
-        Card {
-            HStack(spacing: 14) {
-                IconTile(symbol: connectionType.1,
-                         colors: isOnline ? Feature.network.colors : [Theme.red, Theme.orange], size: 56)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(connectionType.0).font(.system(.title2, design: .rounded).weight(.bold))
-                    if let p = model.path {
-                        HStack(spacing: 6) {
-                            if p.supportsIPv4 { Pill(text: "IPv4", color: Theme.green) }
-                            if p.supportsIPv6 { Pill(text: "IPv6", color: Theme.blue) }
-                            if p.isExpensive { Pill(text: "Coûteux", color: Theme.warn) }
-                            if p.isConstrained { Pill(text: "Données réduites", color: Theme.warn) }
-                        }
-                    }
+    private var connectionSection: some View {
+        Section {
+            Label(connectionType.0, systemImage: connectionType.1)
+                .font(.headline)
+            if let p = model.path {
+                LabeledContent("Protocoles") {
+                    Text([p.supportsIPv4 ? "IPv4" : nil, p.supportsIPv6 ? "IPv6" : nil].compactMap { $0 }.joined(separator: ", "))
                 }
+                if p.isExpensive { LabeledContent("Réseau coûteux", value: "Oui") }
+                if p.isConstrained { LabeledContent("Mode données réduites", value: "Activé") }
             }
         }
     }
 
-    private var speedCard: some View {
-        Card {
+    // MARK: Test de débit
+
+    private var speedSection: some View {
+        Section {
+            SpeedGauge(value: speed.running ? speed.live : (speed.download ?? 0),
+                       phase: speed.phase,
+                       progress: speed.phaseProgress,
+                       running: speed.running)
+                .frame(height: 190)
+                .padding(.top, 8)
+
             HStack {
-                SectionTitle(text: "Test de débit", symbol: "speedometer", color: Theme.green)
-                Spacer()
-                Button {
-                    Task { await model.runTest() }
-                } label: {
-                    if model.testing {
-                        HStack(spacing: 6) { ProgressView().tint(.white); Text(model.testPhase) }
-                    } else {
-                        Label("Lancer", systemImage: "play.fill")
+                result("Réception", speed.download, "Mb/s", .blue, active: speed.phase == .download)
+                Divider()
+                result("Envoi", speed.upload, "Mb/s", .purple, active: speed.phase == .upload)
+            }
+            HStack {
+                result("Latence", speed.latency, "ms", .orange, active: speed.phase == .latency)
+                Divider()
+                result("Gigue", speed.jitter, "ms", .teal, active: speed.phase == .latency)
+            }
+
+            if !speed.downloadSamples.isEmpty || !speed.uploadSamples.isEmpty {
+                Chart {
+                    ForEach(speed.downloadSamples) { s in
+                        LineMark(x: .value("Temps", s.time), y: .value("Mb/s", s.mbps), series: .value("Sens", "Réception"))
+                            .foregroundStyle(.blue)
+                        AreaMark(x: .value("Temps", s.time), y: .value("Mb/s", s.mbps), series: .value("Sens", "Réception"))
+                            .foregroundStyle(.blue.opacity(0.15))
+                    }
+                    ForEach(speed.uploadSamples) { s in
+                        LineMark(x: .value("Temps", s.time), y: .value("Mb/s", s.mbps), series: .value("Sens", "Envoi"))
+                            .foregroundStyle(.purple)
+                        AreaMark(x: .value("Temps", s.time), y: .value("Mb/s", s.mbps), series: .value("Sens", "Envoi"))
+                            .foregroundStyle(.purple.opacity(0.15))
                     }
                 }
-                .buttonStyle(GradientButtonStyle(colors: Feature.network.colors))
-                .disabled(model.testing)
+                .chartXScale(domain: 0...10)
+                .chartXAxisLabel("secondes")
+                .chartYAxisLabel("Mb/s")
+                .frame(height: 140)
+                .animation(.linear(duration: 0.2), value: speed.downloadSamples.count + speed.uploadSamples.count)
             }
-            HStack(spacing: 10) {
-                metric("Réception", model.download.map { String(format: "%.0f", $0) }, "Mb/s",
-                       "arrow.down.circle.fill", [Theme.green, Theme.mint])
-                metric("Envoi", model.upload.map { String(format: "%.0f", $0) }, "Mb/s",
-                       "arrow.up.circle.fill", [Theme.violet, Theme.pink])
+
+            if !speed.pings.isEmpty {
+                Chart(Array(speed.pings.enumerated()), id: \.offset) { item in
+                    BarMark(x: .value("Essai", item.offset + 1), y: .value("ms", item.element))
+                        .foregroundStyle(.orange)
+                }
+                .chartXAxis(.hidden)
+                .chartYAxisLabel("ms")
+                .frame(height: 70)
             }
-            HStack(spacing: 10) {
-                metric("Latence", model.pingAvg.map { String(format: "%.0f", $0) }, "ms",
-                       "timer", [Theme.orange, Theme.yellow])
-                metric("Gigue", model.jitter.map { String(format: "%.0f", $0) }, "ms",
-                       "waveform.path", [Theme.blue, Theme.cyan])
+
+            if let error = speed.error {
+                Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
-            if model.pings.count > 1 {
-                Sparkline(values: model.pings, color: Theme.orange).frame(height: 40)
+
+            Button {
+                if speed.running { speed.cancel() } else { speed.start() }
+            } label: {
+                Label(speed.running ? "Arrêter" : (speed.phase == .done ? "Relancer le test" : "Lancer le test"),
+                      systemImage: speed.running ? "stop.fill" : "play.fill")
+                    .frame(maxWidth: .infinity)
             }
-            Text("Mesure vers Cloudflare (1.1.1.1 et speed.cloudflare.com). Consomme environ 35 Mo.")
-                .font(.caption2).foregroundStyle(Theme.dim)
+            .buttonStyle(.borderedProminent)
+            .tint(speed.running ? .red : .accentColor)
+            .controlSize(.large)
+        } header: {
+            Text("Test de débit")
+        } footer: {
+            Text("Mesure vers Cloudflare, 4 connexions en parallèle, 10 s par sens. Peut consommer jusqu'à 500 Mo sur une connexion rapide\(speed.dataUsed > 0 ? " (\(ByteCountFormatter.string(fromByteCount: speed.dataUsed, countStyle: .file)) utilisés)" : "").")
         }
     }
 
-    private func metric(_ label: String, _ value: String?, _ unit: String, _ symbol: String, _ colors: [Color]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label(label, systemImage: symbol)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(colors[0])
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value ?? "–")
-                    .font(.system(.title, design: .rounded).weight(.bold))
+    private func result(_ label: String, _ value: Double?, _ unit: String, _ color: Color, active: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(active ? color : .secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value.map { $0 >= 100 ? String(format: "%.0f", $0) : String(format: "%.1f", $0) } ?? "–")
+                    .font(.title2.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
                     .contentTransition(.numericText())
-                Text(unit).font(.caption.weight(.semibold)).foregroundStyle(Theme.dim)
+                Text(unit).font(.caption).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(colors[0].opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var publicCard: some View {
-        Card {
-            SectionTitle(text: "Internet", symbol: "globe", color: Theme.blue)
+    // MARK: Infos
+
+    private var publicSection: some View {
+        Section("Internet") {
             if let info = model.publicInfo {
                 InfoRow(label: "IP publique", value: info.ip ?? "—", mono: true)
                 if let isp = info.connection?.isp ?? info.connection?.org { InfoRow(label: "Opérateur", value: isp) }
@@ -231,13 +206,7 @@ struct NetworkInfoView: View {
                 let place = [info.city, info.country].compactMap { $0 }.joined(separator: ", ")
                 if !place.isEmpty { InfoRow(label: "Localisation de l'IP", value: place) }
             } else if model.publicError {
-                HStack {
-                    Label("Impossible de joindre ipwho.is.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout).foregroundStyle(Theme.warn)
-                    Spacer()
-                    Button("Réessayer") { Task { await model.loadPublicIP() } }
-                        .font(.callout.weight(.semibold))
-                }
+                Button("Impossible de joindre ipwho.is — réessayer") { Task { await model.loadPublicIP() } }
             } else {
                 ProgressView()
             }
@@ -252,15 +221,14 @@ struct NetworkInfoView: View {
         return nil
     }
 
-    private var localCard: some View {
-        Card {
-            SectionTitle(text: "Réseau local", symbol: "house.fill", color: Theme.indigo)
+    private var localSection: some View {
+        Section {
             if let w = model.wifi {
                 InfoRow(label: "IP Wi‑Fi", value: w.ipString, mono: true)
                 InfoRow(label: "Masque", value: "\(w.maskString) (/\(w.prefix))", mono: true)
                 InfoRow(label: "Sous-réseau", value: "\(NetUtil.ipString(w.network))/\(w.prefix)", mono: true)
             } else {
-                Text("Pas d'adresse Wi‑Fi.").font(.callout).foregroundStyle(Theme.dim)
+                Text("Pas d'adresse Wi‑Fi.").foregroundStyle(.secondary)
             }
             if let gw = gatewayIP {
                 InfoRow(label: "Passerelle", value: gw, mono: true)
@@ -271,6 +239,98 @@ struct NetworkInfoView: View {
             if let p = model.path {
                 InfoRow(label: "Interfaces", value: p.availableInterfaces.map { $0.name }.joined(separator: ", "))
             }
+        } header: {
+            Text("Réseau local")
+        } footer: {
+            Text("Le nom du Wi‑Fi et sa puissance ne sont pas accessibles aux applis installées hors App Store.")
         }
+    }
+}
+
+/// Compteur semi-circulaire à échelle logarithmique (1 à 1000 Mb/s).
+struct SpeedGauge: View {
+    let value: Double
+    let phase: SpeedTest.Phase
+    let progress: Double
+    let running: Bool
+
+    private let ticks: [Double] = [1, 5, 10, 50, 100, 250, 500, 1000]
+
+    private var color: Color {
+        switch phase {
+        case .upload: return .purple
+        case .latency: return .orange
+        default: return .blue
+        }
+    }
+
+    private func fraction(_ v: Double) -> Double {
+        guard v > 1 else { return max(0, v) * 0.02 }
+        return min(1, log10(v) / 3)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let radius = min(w / 2, geo.size.height) - 18
+            let center = CGPoint(x: w / 2, y: radius + 14)
+            ZStack {
+                Arc(fraction: 1)
+                    .stroke(Color(uiColor: .systemFill), style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                    .frame(width: radius * 2, height: radius * 2)
+                    .position(center)
+                Arc(fraction: fraction(value))
+                    .stroke(color, style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                    .frame(width: radius * 2, height: radius * 2)
+                    .position(center)
+                    .animation(.easeOut(duration: 0.25), value: value)
+
+                ForEach(ticks, id: \.self) { t in
+                    let angle = Double.pi * (1 - fraction(t))
+                    Text(t >= 1000 ? "1G" : "\(Int(t))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .position(x: center.x + CGFloat(cos(angle)) * (radius - 28),
+                                  y: center.y - CGFloat(sin(angle)) * (radius - 28))
+                }
+
+                VStack(spacing: 0) {
+                    Text(running || value > 0 ? (value >= 100 ? String(format: "%.0f", value) : String(format: "%.1f", value)) : "–")
+                        .font(.system(size: 44, weight: .semibold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    Text(running ? "\(phase.rawValue) · Mb/s" : (phase == .done ? "Réception · Mb/s" : "Mb/s"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if running {
+                        ProgressView(value: progress)
+                            .tint(color)
+                            .frame(width: 90)
+                            .padding(.top, 6)
+                    }
+                }
+                .position(x: center.x, y: center.y - radius * 0.25)
+            }
+        }
+    }
+}
+
+/// Demi-cercle supérieur, rempli de gauche à droite selon `fraction`.
+struct Arc: Shape {
+    var fraction: Double
+
+    var animatableData: Double {
+        get { fraction }
+        set { fraction = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.addArc(center: CGPoint(x: rect.midX, y: rect.midY),
+                 radius: rect.width / 2,
+                 startAngle: .degrees(180),
+                 endAngle: .degrees(180 + 180 * max(0.001, min(1, fraction))),
+                 clockwise: false)
+        return p
     }
 }

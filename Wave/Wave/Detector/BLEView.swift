@@ -93,6 +93,9 @@ struct BLEView: View {
                         Label(scanner.isScanning ? "Mettre en pause" : "Reprendre",
                               systemImage: scanner.isScanning ? "pause.fill" : "play.fill")
                     }
+                    Toggle(isOn: Binding(get: { scanner.resolveNames }, set: { scanner.resolveNames = $0 })) {
+                        Label("Lire le nom des appareils sans nom", systemImage: "character.cursor.ibeam")
+                    }
                     Button(role: .destructive) {
                         scanner.clear()
                     } label: {
@@ -190,6 +193,23 @@ struct BLEDetailView: View {
                     }
                     hotCold(d)
                     Card {
+                        NavigationLink {
+                            GATTView(scanner: scanner, id: d.id)
+                        } label: {
+                            HStack {
+                                Label("Se connecter à l'appareil", systemImage: "link")
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                            }
+                        }
+                        .disabled(!d.connectable)
+                        Text(d.connectable
+                             ? "Lire la batterie, le fabricant, le modèle, les services, faire sonner l'appareil s'il le permet…"
+                             : "Cet appareil n'accepte pas les connexions.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Card {
                         SectionTitle(text: "Identification", symbol: "info.circle")
                         InfoRow(label: "Nom diffusé", value: d.name ?? "—")
                         InfoRow(label: "Marque", value: d.info.brand ?? "Inconnue")
@@ -277,7 +297,7 @@ struct BLEDetailView: View {
             }
             HStack(spacing: 20) {
                 ZStack {
-                    GaugeRing(progress: level, colors: [Theme.red, Theme.orange, Theme.teal, Theme.green], lineWidth: 14)
+                    GaugeRing(progress: level, colors: [rssiColor(d.rssi)], lineWidth: 12)
                     VStack(spacing: 0) {
                         Text(proximity(d.rssi))
                             .font(.system(.headline, design: .rounded))

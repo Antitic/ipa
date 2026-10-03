@@ -172,6 +172,55 @@ struct LANHostDetail: View {
             }
             .waveRow()
 
+            Section("Actions") {
+                NavigationLink {
+                    PingView(host: host.ip, port: "\(host.openPorts.first ?? 80)")
+                } label: {
+                    Label("Ping", systemImage: "waveform.path.ecg")
+                }
+                NavigationLink {
+                    PortScanView(host: host.ip)
+                } label: {
+                    Label("Analyser les ports", systemImage: "door.left.hand.open")
+                }
+                if let web = host.openPorts.first(where: { LANScanner.webPorts.contains($0) }) {
+                    NavigationLink {
+                        HTTPHeadersView(address: "\([443, 8443, 5001].contains(Int(web)) ? "https" : "http")://\(host.ip):\(web)")
+                    } label: {
+                        Label("En-têtes HTTP", systemImage: "doc.text.magnifyingglass")
+                    }
+                }
+                NavigationLink {
+                    WakeOnLANView(prefill: WOLDevice(name: host.displayName, mac: host.macAddress ?? "", ip: host.ip))
+                } label: {
+                    Label("Wake-on-LAN", systemImage: "power")
+                }
+                Button {
+                    UIPasteboard.general.string = host.ip
+                } label: {
+                    Label("Copier l'adresse IP", systemImage: "doc.on.doc")
+                }
+            }
+            .waveRow()
+
+            let apps = openWith
+            if !apps.isEmpty {
+                Section {
+                    ForEach(Array(apps.enumerated()), id: \.offset) { item in
+                        if let url = URL(string: item.element.1) {
+                            Link(destination: url) {
+                                Label(item.element.0, systemImage: item.element.2)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Ouvrir avec")
+                } footer: {
+                    Text("Ouvre l'app installée qui gère ce protocole (Safari, Fichiers, client SSH, VNC, Bureau à distance, VLC…).")
+                }
+                .waveRow()
+            }
+
             if !host.openPorts.isEmpty {
                 Section("Ports ouverts") {
                     ForEach(host.openPorts, id: \.self) { p in
@@ -230,5 +279,36 @@ struct LANHostDetail: View {
         .waveScreen(.lan)
         .navigationTitle(host.displayName)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// (titre, URL, symbole) pour chaque service ouvert qu'une app iOS sait ouvrir.
+    private var openWith: [(String, String, String)] {
+        let ip = host.ip
+        var items: [(String, String, String)] = []
+        for p in host.openPorts {
+            switch p {
+            case 80, 81, 8000, 8080, 8888, 9000, 5000:
+                items.append(("Page web (port \(p))", p == 80 ? "http://\(ip)" : "http://\(ip):\(p)", "safari"))
+            case 443, 8443, 5001:
+                items.append(("Page web sécurisée (port \(p))", p == 443 ? "https://\(ip)" : "https://\(ip):\(p)", "lock"))
+            case 22:
+                items.append(("Terminal SSH", "ssh://\(ip)", "terminal"))
+            case 21:
+                items.append(("FTP", "ftp://\(ip)", "folder"))
+            case 445:
+                items.append(("Partage de fichiers (SMB)", "smb://\(ip)", "externaldrive.connected.to.line.below"))
+            case 548:
+                items.append(("Partage de fichiers (AFP)", "afp://\(ip)", "externaldrive"))
+            case 5900:
+                items.append(("Partage d'écran (VNC)", "vnc://\(ip)", "display"))
+            case 3389:
+                items.append(("Bureau à distance (RDP)", "rdp://full%20address=s:\(ip)", "desktopcomputer"))
+            case 554, 8554:
+                items.append(("Flux vidéo RTSP (port \(p))", "rtsp://\(ip):\(p)", "play.rectangle"))
+            default:
+                break
+            }
+        }
+        return items
     }
 }

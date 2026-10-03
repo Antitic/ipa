@@ -18,20 +18,19 @@ struct SatellitesView: View {
         let now = Date()
         let passes = store.issPasses.filter { $0.end > now }
 
-        ScrollView {
-            VStack(spacing: 16) {
-                header
+        List {
+            header
+            Section {
                 skyCard(visible)
                 legend(counts)
-                if !passes.isEmpty { issCard(passes) }
-                listCard(visible)
-                Text("Positions calculées à partir des orbites publiées par CelesTrak, pas captées par le téléphone : iOS ne donne pas accès aux signaux GNSS reçus.")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.dim)
-                    .padding(.horizontal, 4)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+            } footer: {
+                if let d = store.dataDate {
+                    Text("Orbites CelesTrak mises à jour \(d.shortAgo). Positions calculées, pas captées : iOS ne donne pas accès aux signaux GNSS reçus.")
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            if !passes.isEmpty { issSection(passes) }
+            listSection(visible)
         }
         .waveScreen(.satellites)
         .navigationTitle("Satellites")
@@ -68,7 +67,6 @@ struct SatellitesView: View {
         .sheet(item: $selected) { pos in
             SatelliteDetail(position: pos)
                 .presentationDetents([.medium, .large])
-                .presentationCornerRadius(28)
         }
     }
 
@@ -81,69 +79,59 @@ struct SatellitesView: View {
 
     @ViewBuilder private var header: some View {
         if loc.status == .denied || loc.status == .restricted {
-            Card {
-                Label("Localisation refusée", systemImage: "location.slash.fill")
-                    .font(.headline)
-                    .foregroundStyle(Theme.danger)
-                Text("Active la localisation pour Wave dans Réglages pour calculer le ciel au-dessus de toi.")
-                    .font(.footnote).foregroundStyle(Theme.dim)
+            Section {
+                Label("Localisation refusée", systemImage: "location.slash")
+                    .foregroundStyle(.red)
                 if let url = URL(string: UIApplication.openSettingsURLString) {
-                    Link("Ouvrir Réglages", destination: url).font(.callout.weight(.semibold))
+                    Link("Autoriser dans Réglages", destination: url)
                 }
             }
         } else if loc.location == nil {
-            Card {
+            Section {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Recherche de ta position…").foregroundStyle(Theme.dim)
+                    Text("Recherche de ta position…").foregroundStyle(.secondary)
                 }
             }
         }
         if let err = store.error {
-            Card {
-                Label(err, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Theme.warn)
+            Section {
+                Label(err, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
                     .font(.footnote)
             }
         }
     }
 
+    @ViewBuilder
     private func skyCard(_ visible: [SatPosition]) -> some View {
-        Card {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 0) {
-                    SectionTitle(text: "Au-dessus de toi", symbol: "sparkles", color: Theme.indigo)
-                    BigNumber(value: "\(visible.count)", unit: "satellites",
-                              colors: Feature.satellites.colors, size: 48)
-                }
-                Spacer()
-                Button {
-                    withAnimation(.spring) { followCompass.toggle() }
-                } label: {
-                    Image(systemName: followCompass ? "location.north.line.fill" : "location.north.line")
-                }
-                .buttonStyle(CircleIconButtonStyle(color: followCompass ? Theme.indigo : .primary))
-                .disabled(loc.heading == nil)
-                .accessibilityLabel("Orienter avec la boussole")
+        HStack {
+            VStack(alignment: .leading) {
+                Text("\(visible.count)")
+                    .font(.largeTitle.weight(.semibold))
+                    .monospacedDigit()
+                Text("satellites au-dessus de l'horizon")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            SkyPlot(positions: visible,
-                    rotation: followCompass ? -(loc.heading ?? 0) : 0,
-                    onTap: { selected = $0 })
-                .aspectRatio(1, contentMode: .fit)
-                .overlay {
-                    if store.loading && store.positions.isEmpty {
-                        VStack(spacing: 8) {
-                            ProgressView().tint(.white)
-                            Text("Chargement des orbites…").font(.caption).foregroundStyle(.white.opacity(0.8))
-                        }
-                    }
-                }
-            if let d = store.dataDate {
-                Label("Orbites mises à jour \(d.shortAgo)", systemImage: "clock")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.dim)
+            Spacer()
+            Toggle(isOn: $followCompass) {
+                Image(systemName: "location.north.line")
             }
+            .toggleStyle(.button)
+            .disabled(loc.heading == nil)
+            .accessibilityLabel("Orienter avec la boussole")
         }
+        SkyPlot(positions: visible,
+                rotation: followCompass ? -(loc.heading ?? 0) : 0,
+                onTap: { selected = $0 })
+            .aspectRatio(1, contentMode: .fit)
+            .padding(.vertical, 4)
+            .overlay {
+                if store.loading && store.positions.isEmpty {
+                    ProgressView("Chargement des orbites…")
+                }
+            }
     }
 
     private func legend(_ counts: [Constellation: Int]) -> some View {
@@ -152,90 +140,67 @@ struct SatellitesView: View {
                 ForEach(Constellation.allCases) { c in
                     let isHidden = hidden.contains(c)
                     Button {
-                        withAnimation(.snappy) {
-                            if isHidden { hidden.remove(c) } else { hidden.insert(c) }
-                        }
+                        if isHidden { hidden.remove(c) } else { hidden.insert(c) }
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             Circle().fill(c.color).frame(width: 8, height: 8)
-                            Text("\(c.flag) \(c.rawValue)")
-                            Text("\(counts[c] ?? 0)")
-                                .monospacedDigit()
-                                .foregroundStyle(isHidden ? Theme.dim : c.color)
+                            Text("\(c.rawValue) \(counts[c] ?? 0)").monospacedDigit()
                         }
-                        .font(.footnote.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(isHidden ? Theme.card : c.color.opacity(0.14), in: Capsule())
-                        .overlay(Capsule().strokeBorder(isHidden ? Theme.stroke : c.color.opacity(0.35), lineWidth: 1))
-                        .opacity(isHidden ? 0.55 : 1)
+                        .font(.footnote)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bordered)
+                    .tint(isHidden ? .gray : c.color)
+                    .opacity(isHidden ? 0.5 : 1)
                 }
             }
-            .padding(.horizontal, 2)
         }
     }
 
-    private func issCard(_ passes: [Pass]) -> some View {
-        Card {
-            HStack(spacing: 12) {
-                IconTile(symbol: "airplane", colors: [Theme.violet, Theme.indigo], size: 36)
-                Text("Prochains passages de l'ISS")
-                    .font(.system(.headline, design: .rounded))
-            }
+    private func issSection(_ passes: [Pass]) -> some View {
+        Section {
             ForEach(passes.prefix(4)) { p in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.start.formatted(.dateTime.weekday(.wide).hour().minute()).capitalized)
-                            .font(.callout.weight(.semibold))
                         Text("\(compassName(p.startAz)) → \(compassName(p.endAz)) · \(max(1, Int(p.end.timeIntervalSince(p.start) / 60))) min")
-                            .font(.caption).foregroundStyle(Theme.dim)
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Pill(text: "max \(Int(p.maxEl))°", color: p.maxEl > 45 ? Theme.green : Theme.blue)
+                    Text("max \(Int(p.maxEl))°")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
-                if p.id != passes.prefix(4).last?.id { Divider() }
             }
-            Text("Visible à l'œil nu surtout à l'aube et au crépuscule, quand l'ISS est éclairée et le ciel sombre.")
-                .font(.caption2).foregroundStyle(Theme.dim)
+        } header: {
+            Text("Prochains passages de l'ISS")
+        } footer: {
+            Text("Visible à l'œil nu surtout à l'aube et au crépuscule.")
         }
     }
 
-    private func listCard(_ visible: [SatPosition]) -> some View {
-        Card {
-            SectionTitle(text: "Liste", symbol: "list.bullet")
+    private func listSection(_ visible: [SatPosition]) -> some View {
+        Section("Satellites visibles") {
             if visible.isEmpty {
                 Text(store.loading ? "Chargement des orbites…" : "Aucun satellite à afficher.")
-                    .foregroundStyle(Theme.dim).font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            let lastID = visible.last?.id
             ForEach(visible) { p in
                 Button { selected = p } label: {
                     HStack(spacing: 12) {
-                        Circle()
-                            .fill(p.sat.constellation.color.gradient)
-                            .frame(width: 30, height: 30)
-                            .overlay(
-                                Text(p.sat.constellation == .iss ? "🛰️" : String(p.sat.constellation.rawValue.prefix(1)))
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.white)
-                            )
+                        Circle().fill(p.sat.constellation.color).frame(width: 10, height: 10)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(p.sat.shortName).font(.callout.weight(.semibold))
-                            Text(p.sat.constellation.rawValue).font(.caption2).foregroundStyle(Theme.dim)
+                            Text(p.sat.shortName)
+                            Text(p.sat.constellation.rawValue).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 1) {
-                            Text("\(Int(p.el))°").font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
-                            Text("\(compassName(p.az)) · \(Int(p.az))°").font(.caption2.monospacedDigit()).foregroundStyle(Theme.dim)
+                            Text("\(Int(p.el))°").monospacedDigit()
+                            Text("\(compassName(p.az)) · \(Int(p.az))°").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
-                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                if p.id != lastID { Divider().padding(.leading, 42) }
+                .foregroundStyle(.primary)
             }
         }
     }
@@ -253,18 +218,10 @@ struct SkyPlot: View {
             let r = size / 2 - 22
             let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             ZStack {
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [Color(red: 0.13, green: 0.16, blue: 0.38), Color(red: 0.03, green: 0.04, blue: 0.12)],
-                        center: .center, startRadius: 0, endRadius: r * 1.1))
-                    .frame(width: 2 * r + 36, height: 2 * r + 36)
-                    .position(c)
-                    .shadow(color: Theme.indigo.opacity(0.35), radius: 16, y: 6)
-
                 // Cercles d'élévation 0°, 30°, 60°
                 ForEach([1.0, 2.0 / 3.0, 1.0 / 3.0], id: \.self) { f in
                     Circle()
-                        .stroke(Color.white.opacity(0.13), style: StrokeStyle(lineWidth: 1, dash: f == 1 ? [] : [3, 4]))
+                        .stroke(Color(uiColor: .separator), style: StrokeStyle(lineWidth: 1, dash: f == 1 ? [] : [3, 4]))
                         .frame(width: 2 * r * f, height: 2 * r * f)
                         .position(c)
                 }
@@ -272,15 +229,15 @@ struct SkyPlot: View {
                     p.move(to: CGPoint(x: c.x - r, y: c.y)); p.addLine(to: CGPoint(x: c.x + r, y: c.y))
                     p.move(to: CGPoint(x: c.x, y: c.y - r)); p.addLine(to: CGPoint(x: c.x, y: c.y + r))
                 }
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .stroke(Color(uiColor: .separator), lineWidth: 0.5)
                 .rotationEffect(.degrees(rotation), anchor: UnitPoint(x: c.x / geo.size.width, y: c.y / geo.size.height))
 
                 ForEach(0..<4, id: \.self) { i in
                     let label = ["N", "E", "S", "O"][i]
                     let pt = point(az: Double(i) * 90, el: -10, center: c, radius: r)
                     Text(label)
-                        .font(.system(.caption, design: .rounded).weight(.heavy))
-                        .foregroundStyle(i == 0 ? Theme.red : Color.white.opacity(0.7))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(i == 0 ? Color.red : Color.secondary)
                         .position(pt)
                 }
 
@@ -292,11 +249,10 @@ struct SkyPlot: View {
                             Circle()
                                 .fill(p.sat.constellation.color)
                                 .frame(width: isISS ? 14 : 9, height: isISS ? 14 : 9)
-                                .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: isISS ? 2 : 1))
-                                .shadow(color: p.sat.constellation.color, radius: 6)
+
                             Text(isISS ? "ISS" : p.sat.shortName)
-                                .font(.system(size: 8, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white.opacity(0.8))
+                                .font(.system(size: 8))
+                                .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .fixedSize()
                         }
@@ -307,7 +263,7 @@ struct SkyPlot: View {
                     .position(x: pt.x, y: pt.y + 5)
                 }
             }
-            .animation(.easeInOut(duration: 0.4), value: rotation)
+            .animation(.easeInOut(duration: 0.3), value: rotation)
         }
     }
 
@@ -326,12 +282,9 @@ struct SatelliteDetail: View {
             List {
                 Section {
                     HStack(spacing: 14) {
-                        Circle()
-                            .fill(position.sat.constellation.color.gradient)
-                            .frame(width: 52, height: 52)
-                            .overlay(Text(position.sat.constellation.flag).font(.title2))
+                        Text(position.sat.constellation.flag).font(.largeTitle)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(position.sat.name).font(.system(.headline, design: .rounded))
+                            Text(position.sat.name).font(.headline)
                             Text(position.sat.constellation.rawValue).font(.subheadline).foregroundStyle(Theme.dim)
                         }
                     }

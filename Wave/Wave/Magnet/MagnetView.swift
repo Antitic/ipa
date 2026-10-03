@@ -2,39 +2,56 @@ import SwiftUI
 import CoreMotion
 
 final class MagnetModel: ObservableObject {
-    @Published var field: Double = 0                     // µT
+    /// Champ terrestre local (calibré par iOS, sans le magnétisme propre de l'iPhone), en µT.
+    @Published var field: Double = 0
     @Published var vector = SIMD3<Double>(0, 0, 0)
     @Published var history: [Double] = []
     @Published var calibrated = false
+    /// Mesure brute du capteur, utilisée par le détecteur de métaux. Elle inclut le
+    /// magnétisme de l'iPhone, mais ce biais est constant et disparaît avec la remise à zéro.
+    @Published var raw: Double = 0
     @Published var baseline: Double?
     @Published var available = true
 
     private let motion = CMMotionManager()
-    private var lastCalibrated = Date.distantPast
+    private var lastPublish = Date.distantPast
+
+    /// Écart par rapport à la remise à zéro (détecteur de métaux), toujours sur la mesure brute.
+    var delta: Double { abs(raw - (baseline ?? raw)) }
+    var signedDelta: Double { raw - (baseline ?? raw) }
 
     func start() {
-        available = motion.isMagnetometerAvailable || motion.isDeviceMotionAvailable
+        available = motion.isMagnetometerAvailable
+        // Champ calibré (mode « Champ magnétique »).
         if motion.isDeviceMotionAvailable {
-            motion.deviceMotionUpdateInterval = 1.0 / 30
+            motion.deviceMotionUpdateInterval = 1.0 / 20
             motion.showsDeviceMovementDisplay = true
             motion.startDeviceMotionUpdates(using: .xArbitraryCorrectedZVertical, to: .main) { [weak self] m, _ in
                 guard let self, let m else { return }
                 let f = m.magneticField
-                guard f.accuracy != .uncalibrated else { return }
+                self.calibrated = f.accuracy != .uncalibrated
+                guard self.calibrated else { return }
                 let v = SIMD3(f.field.x, f.field.y, f.field.z)
-                if (v * v).sum() > 0 {
-                    self.lastCalibrated = Date()
-                    self.update(v, calibrated: true)
-                }
+                let magnitude = (v * v).sum().squareRoot()
+                guard magnitude > 0 else { return }
+                self.vector = v
+                self.field = self.field == 0 ? magnitude : self.field * 0.7 + magnitude * 0.3
             }
         }
+        // Mesure brute rapide (détecteur de métaux), une seule source : plus de sauts.
         if motion.isMagnetometerAvailable {
-            motion.magnetometerUpdateInterval = 1.0 / 30
+            motion.magnetometerUpdateInterval = 1.0 / 50
             motion.startMagnetometerUpdates(to: .main) { [weak self] d, _ in
                 guard let self, let d else { return }
-                // Valeur brute (inclut le biais de l'iPhone) : utilisée seulement sans calibration.
-                if Date().timeIntervalSince(self.lastCalibrated) > 1 {
-                    self.update(SIMD3(d.magneticField.x, d.magneticField.y, d.magneticField.z), calibrated: false)
+                let v = SIMD3(d.magneticField.x, d.magneticField.y, d.magneticField.z)
+                let magnitude = (v * v).sum().squareRoot()
+                self.raw = self.raw == 0 ? magnitude : self.raw * 0.6 + magnitude * 0.4
+                if !self.calibrated { self.vector = v }
+                // Historique à 10 Hz pour ne pas surcharger l'affichage.
+                if Date().timeIntervalSince(self.lastPublish) > 0.1 {
+                    self.lastPublish = Date()
+                    self.history.append(self.calibrated ? self.field : self.raw)
+                    if self.history.count > 200 { self.history.removeFirst(self.history.count - 200) }
                 }
             }
         }
@@ -45,17 +62,7 @@ final class MagnetModel: ObservableObject {
         motion.stopMagnetometerUpdates()
     }
 
-    private func update(_ v: SIMD3<Double>, calibrated: Bool) {
-        vector = v
-        let magnitude = (v * v).sum().squareRoot()
-        field = field == 0 ? magnitude : field * 0.7 + magnitude * 0.3
-        self.calibrated = calibrated
-        history.append(field)
-        if history.count > 300 { history.removeFirst(history.count - 300) }
-    }
-
-    func tare() { baseline = field }
-    var delta: Double { abs(field - (baseline ?? field)) }
+    func tare() { baseline = raw }
 }
 
 struct MagnetView: View {
@@ -72,7 +79,8 @@ struct MagnetView: View {
 
     private let earthField = 47.0   // valeur typique en France, en µT
 
-    private var anomaly: Double { abs(model.field - earthField) }
+    /// Sans calibration, le champ affiché inclut le magnétisme de l'iPhone : pas d'anomalie calculée.
+    private var anomaly: Double { model.calibrated ? abs(model.field - earthField) : 0 }
 
     var body: some View {
         ScrollView {
@@ -111,7 +119,8 @@ struct MagnetView: View {
             // « activé » au retour alors que le son était coupé.
             sound = false
         }
-        .onChange(of: model.field) { _, _ in updateTone() }
+        .onChange(of: model.field) { _, _ in if mode == .field { updateTone() } }
+        .onChange(of: model.raw) { _, _ in if mode == .metal { updateTone() } }
         .onChange(of: sound) { _, on in
             if on { tone.start(amplitude: 0); updateTone() } else { tone.stop() }
         }
@@ -137,9 +146,9 @@ struct MagnetView: View {
             }
             HStack(spacing: 20) {
                 ZStack {
-                    GaugeRing(progress: min(1, model.field / 200), colors: colors(anomaly), lineWidth: 16)
+                    GaugeRing(progress: min(1, (model.calibrated ? model.field : model.raw) / 200), colors: colors(anomaly), lineWidth: 16)
                     VStack(spacing: 0) {
-                        Text(String(format: "%.0f", model.field))
+                        Text(String(format: "%.0f", model.calibrated ? model.field : model.raw))
                             .font(.system(size: 34, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .contentTransition(.numericText())
@@ -167,7 +176,7 @@ struct MagnetView: View {
     }
 
     private var metalCard: some View {
-        let delta = model.field - (model.baseline ?? model.field)
+        let delta = model.signedDelta
         return Card {
             HStack {
                 SectionTitle(text: "Détecteur", symbol: "scope", color: color(model.delta))
@@ -179,7 +188,7 @@ struct MagnetView: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.cardHi)
                     Capsule()
-                        .fill(LinearGradient(colors: colors(model.delta), startPoint: .leading, endPoint: .trailing))
+                        .fill(color(model.delta))
                         .frame(width: geo.size.width * CGFloat(min(1, max(0.02, model.delta / 100))))
                         .animation(.easeOut(duration: 0.15), value: model.delta)
                 }
@@ -209,6 +218,7 @@ struct MagnetView: View {
     }
 
     private var anomalyText: String {
+        if !model.calibrated { return "Calibration en cours" }
         switch anomaly {
         case ..<8: return "Champ normal"
         case ..<25: return "Légère anomalie"
