@@ -23,7 +23,9 @@ Application iOS qui affiche en temps réel tous les appareils Bluetooth à proxi
 - Journal des échanges
 
 **Localiser**
-- Mode « détecteur » : jauge de proximité, tendance (rapprochement / éloignement), vibrations et son de plus en plus rapides
+- Mode « Flèche » façon Recherche précise : faites un tour sur vous-même, la flèche indique la direction de l'appareil (gyroscope + force du signal), avec la distance et un fond qui vire au vert à l'approche
+- Mode « Jauge » : jauge de proximité, tendance (rapprochement / éloignement)
+- Vibrations et son de plus en plus rapides
 
 **Radar**
 - Vue radar animée des appareils autour de vous (échelle de distance logarithmique)
