@@ -39,7 +39,7 @@ struct ContentView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             Image(systemName: detector.glints.isEmpty ? "sparkles" : "sparkles.rectangle.stack.fill")
-                .foregroundStyle(detector.glints.isEmpty ? .secondary : .yellow)
+                .foregroundStyle(detector.glints.isEmpty ? Color.secondary : Color.yellow)
             VStack(alignment: .leading, spacing: 1) {
                 Text(detector.glints.isEmpty ? "Aucun reflet" : "\(detector.glints.count) reflet\(detector.glints.count > 1 ? "s" : "")")
                     .font(.headline)
