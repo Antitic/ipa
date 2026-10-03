@@ -14,8 +14,8 @@ struct RootView: View {
         TabView {
             NavigationStack { DetectorHome() }
                 .tabItem { Label("Détecteur", systemImage: "viewfinder") }
-            NavigationStack { SatellitesView() }
-                .tabItem { Label("Satellites", systemImage: "globe.europe.africa") }
+            NavigationStack { SensorsView() }
+                .tabItem { Label("Capteurs", systemImage: "waveform.path.ecg") }
             NavigationStack { NetworkInfoView() }
                 .tabItem { Label("Réseau", systemImage: "network") }
             NavigationStack { MagnetView() }
