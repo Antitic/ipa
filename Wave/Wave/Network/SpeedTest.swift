@@ -94,27 +94,37 @@ final class SpeedTest: ObservableObject {
         dataUsed = 0
         live = 0
 
-        // 1. Latence : 12 connexions TCP successives vers 1.1.1.1.
+        // 1. Latence : petites requêtes HTTP successives vers Cloudflare.
+        //    (Le probe TCP brut vers 1.1.1.1 est bloqué pour les apps installées par sideload.)
         phase = .latency
-        for i in 0..<12 {
+        let pingConfig = URLSessionConfiguration.ephemeral
+        pingConfig.timeoutIntervalForRequest = 3
+        pingConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let pingSession = URLSession(configuration: pingConfig)
+        var pingURL = URLComponents(string: "https://speed.cloudflare.com/__down")!
+        pingURL.queryItems = [URLQueryItem(name: "bytes", value: "0")]
+        for i in 0..<10 {
             if Task.isCancelled { break }
+            var req = URLRequest(url: pingURL.url!)
+            req.httpMethod = "GET"
             let start = Date()
-            let state = await NetUtil.probe("1.1.1.1", 443, timeout: 2)
-            if state == .open { pings.append(Date().timeIntervalSince(start) * 1000) }
-            phaseProgress = Double(i + 1) / 12
+            if (try? await pingSession.data(for: req)) != nil {
+                pings.append(Date().timeIntervalSince(start) * 1000)
+            }
+            phaseProgress = Double(i + 1) / 10
         }
-        if pings.isEmpty && !Task.isCancelled {
-            error = "Serveur injoignable. Vérifie ta connexion."
-            finish()
-            return
-        }
+        pingSession.invalidateAndCancel()
 
         // 2. Réception puis 3. envoi, chacun pendant 10 s maximum.
+        //    On continue même si la latence a échoué : ces phases disent si Internet répond.
         if !Task.isCancelled {
             download = await measure(.download)
         }
         if !Task.isCancelled {
             upload = await measure(.upload)
+        }
+        if download == nil && upload == nil && !Task.isCancelled {
+            error = "Serveur de test injoignable. Vérifie ta connexion Internet."
         }
         finish()
     }

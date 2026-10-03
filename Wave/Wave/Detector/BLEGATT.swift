@@ -18,6 +18,7 @@ final class GATTSession: NSObject, ObservableObject, CBPeripheralDelegate {
     @Published private(set) var state: State = .idle
     @Published private(set) var services: [CBService] = []
     @Published private(set) var rssi: Int?
+    @Published private(set) var rssiHistory: [Int] = []
     @Published private(set) var battery: Int?
     @Published private(set) var info: [String: String] = [:]
     @Published private(set) var log: [LogEntry] = []
@@ -151,7 +152,10 @@ final class GATTSession: NSObject, ObservableObject, CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
-        if error == nil { rssi = RSSI.intValue }
+        guard error == nil else { return }
+        rssi = RSSI.intValue
+        rssiHistory.append(RSSI.intValue)
+        if rssiHistory.count > 60 { rssiHistory.removeFirst(rssiHistory.count - 60) }
     }
 
     func peripheralDidUpdateName(_ peripheral: CBPeripheral) {

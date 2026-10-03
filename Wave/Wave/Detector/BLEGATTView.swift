@@ -52,6 +52,16 @@ private struct GATTContent: View {
         }
     }
 
+    private func proximity(_ rssi: Int) -> String {
+        switch rssi {
+        case (-50)...: return "Brûlant 🔥"
+        case (-62)...: return "Chaud"
+        case (-74)...: return "Tiède"
+        case (-86)...: return "Froid"
+        default: return "Glacial"
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -61,14 +71,36 @@ private struct GATTContent: View {
                         Text(stateText)
                     }
                 }
-                if let rssi = session.rssi, session.state == .connected {
-                    LabeledContent("Signal", value: "\(rssi) dBm")
-                }
                 switch session.state {
                 case .connected, .connecting:
                     Button("Se déconnecter", role: .destructive) { scanner.disconnect(id) }
                 default:
                     Button("Se connecter") { scanner.connect(id) }
+                }
+            }
+
+            if session.state == .connected, let rssi = session.rssi {
+                Section {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(rssi) dBm")
+                                .font(.title.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(rssiColor(rssi))
+                                .contentTransition(.numericText())
+                            Text(proximity(rssi)).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if session.rssiHistory.count > 1 {
+                            Sparkline(values: session.rssiHistory.map(Double.init),
+                                      color: rssiColor(rssi), minValue: -100, maxValue: -30)
+                                .frame(width: 120, height: 44)
+                        }
+                    }
+                } header: {
+                    Text("Signal en direct")
+                } footer: {
+                    Text("Mesuré une fois par seconde pendant la connexion : plus stable que le scan pour retrouver l'appareil. Rapproche-toi, le chiffre monte vers −30.")
                 }
             }
 
@@ -111,7 +143,11 @@ private struct GATTContent: View {
             }
 
             if session.state == .connected && session.services.isEmpty {
-                Section { ProgressView("Découverte des services…") }
+                Section {
+                    ProgressView("Découverte des services…")
+                } footer: {
+                    Text("Certains appareils (écouteurs, enceintes, téléphones) ne publient aucun service lisible sans appairage : seul le signal en direct ci-dessus est alors disponible.")
+                }
             }
 
             ForEach(session.services, id: \.self) { service in

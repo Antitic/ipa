@@ -189,12 +189,13 @@ struct MagnetView: View {
                     Capsule().fill(Theme.cardHi)
                     Capsule()
                         .fill(color(model.delta))
-                        .frame(width: geo.size.width * CGFloat(min(1, max(0.02, model.delta / 100))))
+                        // Échelle 0–50 µT : la barre bouge dès les premiers centimètres.
+                        .frame(width: geo.size.width * CGFloat(min(1, max(0.02, model.delta / 50))))
                         .animation(.easeOut(duration: 0.15), value: model.delta)
                 }
             }
             .frame(height: 14)
-            Text(model.delta > 30 ? "Métal tout proche !" : model.delta > 8 ? "Métal à proximité" : "Rien de notable")
+            Text(model.delta > 20 ? "Métal tout proche !" : model.delta > 4 ? "Métal à proximité" : "Rien de notable")
                 .font(.system(.headline, design: .rounded)).foregroundStyle(color(model.delta))
             Button {
                 model.tare()
