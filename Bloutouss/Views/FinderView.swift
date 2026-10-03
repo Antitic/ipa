@@ -155,7 +155,7 @@ private struct ArrowFinderContent: View {
                         .stroke(Color.white.opacity(0.2), lineWidth: 14)
                         .frame(width: 200, height: 200)
                     Circle()
-                        .trim(from: 0, to: min(direction.coverage / 0.6, 1))
+                        .trim(from: 0, to: min(direction.coverage / 0.45, 1))
                         .stroke(Color.white, style: StrokeStyle(lineWidth: 14, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 200, height: 200)
@@ -206,22 +206,26 @@ private struct ArrowFinderContent: View {
         if !direction.isAvailable { return "Gyroscope indisponible" }
         guard direction.hasDirection else { return "Tournez lentement sur vous-même" }
         let degrees = direction.relativeAngle * 180 / .pi
+        let margin = direction.accuracy.map { " · ±\(Int($0.rounded()))°" } ?? ""
+        let text: String
         switch abs(degrees) {
-        case ..<20: return "Devant vous"
-        case 150...: return "Derrière vous"
+        case ..<15: text = "Devant vous"
+        case 150...: text = "Derrière vous"
         default:
-            if abs(degrees) < 60 {
-                return degrees > 0 ? "Légèrement à droite" : "Légèrement à gauche"
-            }
-            return degrees > 0 ? "À droite" : "À gauche"
+            let side = degrees > 0 ? "à droite" : "à gauche"
+            text = "\(Int(abs(degrees).rounded()))° \(side)"
         }
+        return text + margin
     }
 
     private var footnote: String {
         if direction.hasDirection {
-            return "Marchez dans la direction de la flèche. Si elle hésite, refaites un tour complet sur vous-même, téléphone devant vous."
+            if let a = direction.accuracy, a > 30 {
+                return "Direction encore approximative : refaites un ou deux tours lents, téléphone contre la poitrine, pour l'affiner."
+            }
+            return "Marchez dans la direction de la flèche. Après quelques mètres, refaites un tour sur vous-même pour corriger le cap."
         }
-        return "Tenez le téléphone devant vous et faites un tour complet lentement (environ 10 secondes). Votre corps bloque une partie du signal, ce qui révèle la direction."
+        return "Tenez le téléphone contre la poitrine, écran vers vous, et tournez lentement sur vous-même (un tour en 10 à 15 secondes). Votre corps masque le signal, ce qui révèle la direction. Plusieurs tours = plus de précision."
     }
 }
 
