@@ -1,0 +1,65 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version de Xcode
+        run: xcodebuild -version
+
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+
+      - name: Compiler (sans signature)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Wave.xcodeproj \
+            -scheme Wave \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build | tee build.log | grep -E "error:|warning: unre|\*\* BUILD" || true
+          test -d build/Build/Products/Release-iphoneos/Wave.app
+
+      - name: Afficher les erreurs
+        if: failure()
+        run: grep -E "error:" build.log | head -50 || true
+
+      - name: Empaqueter l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Wave.app Payload/
+          zip -qry Wave.ipa Payload
+          ls -lh Wave.ipa
+
+      - name: Artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wave-ipa
+          path: Wave.ipa
+
+      - name: Publier une release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Wave build ${{ github.run_number }}
+          files: Wave.ipa
+          make_latest: true

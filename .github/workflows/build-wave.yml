@@ -1,17 +1,19 @@
-name: Build IPA
+name: Build Wave IPA
 
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
-    paths-ignore:
+    paths:
       - "Wave/**"
       - ".github/workflows/build-wave.yml"
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
+
+defaults:
+  run:
+    working-directory: Wave
 
 jobs:
   build:
@@ -29,8 +31,8 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project Bloutouss.xcodeproj \
-            -scheme Bloutouss \
+            -project Wave.xcodeproj \
+            -scheme Wave \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -38,38 +40,39 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build
+            build | tee build.log | grep -E "error:|\*\* BUILD" || true
+          test -d build/Build/Products/Release-iphoneos/Wave.app
+
+      - name: Afficher les erreurs
+        if: failure()
+        run: grep -E "error:" build.log | head -50 || true
 
       - name: Créer l'IPA
         run: |
           mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/Bloutouss.app Payload/
-          zip -qry Bloutouss.ipa Payload
-          ls -lh Bloutouss.ipa
+          cp -R build/Build/Products/Release-iphoneos/Wave.app Payload/
+          zip -qry Wave.ipa Payload
+          ls -lh Wave.ipa
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Bloutouss-ipa
-          path: Bloutouss.ipa
+          name: Wave-ipa
+          path: Wave/Wave.ipa
 
       - name: Déterminer la version
         id: version
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "tag=wave-v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
 
       - name: Publier la release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: Bloutouss ${{ steps.version.outputs.tag }}
+          name: Wave ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          files: Bloutouss.ipa
+          files: Wave/Wave.ipa
           overwrite_files: true
+          make_latest: false
           body: |
-            IPA non signée de Bloutouss — scanner d'appareils Bluetooth à proximité.
-            Installez-la avec AltStore, Sideloadly ou TrollStore.
+            IPA non signée de Wave — détecteur d'ondes (caméras et micros cachés, satellites, réseau, magnétomètre).
+            Installez-la avec SideStore, AltStore ou Sideloadly.
