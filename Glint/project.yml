@@ -1,0 +1,34 @@
+name: Glint
+options:
+  bundleIdPrefix: com.tikawski
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  Glint:
+    type: application
+    platform: iOS
+    sources:
+      - path: Glint
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tikawski.glint
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: Glint/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Glint/Info.plist
+      properties:
+        CFBundleDisplayName: Glint
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSCameraUsageDescription: Glint utilise la caméra pour repérer les objets qui réfléchissent la lumière.

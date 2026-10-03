@@ -1,0 +1,65 @@
+name: Build Glint IPA
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "Glint/**"
+      - ".github/workflows/build-glint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: Glint
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+      - name: Compiler (sans signature)
+        run: |
+          if ! xcodebuild \
+            -project Glint.xcodeproj -scheme Glint -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1; then
+            grep -E "error:" build.log | head -50
+            exit 1
+          fi
+          grep -E "\*\* BUILD" build.log
+          test -f build/Build/Products/Release-iphoneos/Glint.app/Glint
+      - name: Afficher les erreurs
+        if: failure()
+        run: grep -E "error:" build.log | head -50 || true
+      - name: Créer l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Glint.app Payload/
+          zip -qry Glint.ipa Payload
+          ls -lh Glint.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Glint-ipa
+          path: Glint/Glint.ipa
+      - name: Déterminer la version
+        id: version
+        run: echo "tag=glint-v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Glint ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: Glint/Glint.ipa
+          make_latest: false
+          body: |
+            IPA non signée de Glint — repère les objets qui réfléchissent la lumière (bijou perdu, métal, verre).
+            Installez-la avec SideStore, AltStore ou Sideloadly.
