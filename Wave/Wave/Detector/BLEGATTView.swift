@@ -79,150 +79,170 @@ private struct GATTContent: View {
 
     var body: some View {
         List {
-            // 1. En-tête : nom, état, bouton connexion.
-            Section {
-                HStack(spacing: 12) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.title2)
-                        .foregroundStyle(statusColor)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(deviceName).font(.headline)
-                        HStack(spacing: 5) {
-                            Circle().fill(statusColor).frame(width: 7, height: 7)
-                            Text(stateText).font(.caption).foregroundStyle(.secondary)
-                            if session.state == .connecting { ProgressView().controlSize(.mini) }
-                        }
-                    }
-                    Spacer()
-                }
-                switch session.state {
-                case .connected, .connecting:
-                    Button("Se déconnecter", role: .destructive) { scanner.disconnect(id) }
-                default:
-                    Button {
-                        scanner.connect(id)
-                    } label: {
-                        Label("Se connecter", systemImage: "link")
-                    }
-                }
-            }
-
-            // 2. Batterie + signal, toujours visibles quand connecté.
-            if isConnected {
-                Section("État de l'appareil") {
-                    LabeledContent("Batterie") {
-                        if let b = session.battery {
-                            HStack(spacing: 8) {
-                                Gauge(value: Double(min(b, 100)), in: 0...100) { EmptyView() }
-                                    .gaugeStyle(.accessoryLinearCapacity)
-                                    .tint(b > 20 ? .green : .red)
-                                    .frame(width: 70)
-                                Text("\(b) %").monospacedDigit().foregroundStyle(b > 20 ? .primary : .red)
-                            }
-                        } else {
-                            Text("non communiquée").foregroundStyle(.secondary)
-                        }
-                    }
-                    if let rssi = session.rssi {
-                        LabeledContent("Signal") {
-                            HStack(spacing: 8) {
-                                if session.rssiHistory.count > 1 {
-                                    Sparkline(values: session.rssiHistory.map(Double.init),
-                                              color: rssiColor(rssi), minValue: -100, maxValue: -30)
-                                        .frame(width: 60, height: 24)
-                                }
-                                Text("\(rssi) dBm · \(proximity(rssi))")
-                                    .monospacedDigit()
-                                    .foregroundStyle(rssiColor(rssi))
-                                    .contentTransition(.numericText())
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. Actions.
-            if isConnected && session.alertCharacteristic != nil {
-                Section {
-                    Button {
-                        session.alert(2)
-                    } label: {
-                        Label("Faire sonner", systemImage: "speaker.wave.3")
-                    }
-                    Button {
-                        session.alert(0)
-                    } label: {
-                        Label("Arrêter la sonnerie", systemImage: "speaker.slash")
-                    }
-                } header: {
-                    Text("Retrouver l'appareil")
-                } footer: {
-                    Text("Fait sonner les porte-clés, traceurs et bracelets qui gèrent le service standard « Alerte immédiate ».")
-                }
-            }
-
-            // 4. Infos appareil (fabricant, modèle…).
-            if !session.info.isEmpty {
-                Section("Fiche de l'appareil") {
-                    ForEach(session.info.keys.sorted(), id: \.self) { key in
-                        InfoRow(label: key, value: session.info[key] ?? "")
-                    }
-                }
-            }
-
-            // 5. État de la découverte.
-            if isConnected && session.services.isEmpty {
-                Section {
-                    HStack(spacing: 8) { ProgressView(); Text("Lecture de l'appareil…").foregroundStyle(.secondary) }
-                } footer: {
-                    Text("Certains appareils (écouteurs, enceintes, téléphones) ne partagent aucune information sans appairage. Dans ce cas, seuls le signal et la batterie (si disponible) s'affichent.")
-                }
-            }
-
-            // 6. Détails techniques, repliés.
-            if isConnected && !session.services.isEmpty {
-                Section {
-                    DisclosureGroup("Services et caractéristiques (avancé)") {
-                        ForEach(session.services, id: \.self) { service in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(GATTNames.service(service.uuid))
-                                    .font(.subheadline.weight(.semibold))
-                                ForEach(service.characteristics ?? [], id: \.self) { c in
-                                    Button {
-                                        selected = CharacteristicRef(c: c)
-                                    } label: {
-                                        HStack {
-                                            VStack(alignment: .leading, spacing: 1) {
-                                                Text(GATTNames.characteristic(c.uuid)).font(.callout)
-                                                if let v = session.value(for: c) {
-                                                    Text(GATTFormat.describe(v, uuid: c.uuid))
-                                                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                                                } else {
-                                                    Text(GATTNames.properties(c.properties))
-                                                        .font(.caption).foregroundStyle(.secondary)
-                                                }
-                                            }
-                                            Spacer()
-                                            if c.isNotifying { Image(systemName: "bell.fill").foregroundStyle(.green).font(.caption) }
-                                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                                        }
-                                        .contentShape(Rectangle())
-                                    }
-                                    .foregroundStyle(.primary)
-                                    .padding(.leading, 8)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                } footer: {
-                    Text("Pour explorer, lire et écrire les données brutes de l'appareil.")
-                }
-            }
+            headerSection
+            if isConnected { stateSection }
+            if isConnected && session.alertCharacteristic != nil { alertSection }
+            if !session.info.isEmpty { infoSection }
+            if isConnected && session.services.isEmpty { discoverySection }
+            if isConnected && !session.services.isEmpty { advancedSection }
         }
         .sheet(item: $selected) { ref in
             CharacteristicSheet(session: session, c: ref.c)
         }
+    }
+
+    // 1. En-tête : nom, état, bouton connexion.
+    @ViewBuilder private var headerSection: some View {
+        Section {
+            HStack(spacing: 12) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.title2)
+                    .foregroundStyle(statusColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(deviceName).font(.headline)
+                    HStack(spacing: 5) {
+                        Circle().fill(statusColor).frame(width: 7, height: 7)
+                        Text(stateText).font(.caption).foregroundStyle(.secondary)
+                        if session.state == .connecting { ProgressView().controlSize(.mini) }
+                    }
+                }
+                Spacer()
+            }
+            if isConnected || session.state == .connecting {
+                Button("Se déconnecter", role: .destructive) { scanner.disconnect(id) }
+            } else {
+                Button {
+                    scanner.connect(id)
+                } label: {
+                    Label("Se connecter", systemImage: "link")
+                }
+            }
+        }
+    }
+
+    // 2. Batterie + signal, toujours visibles quand connecté.
+    @ViewBuilder private var stateSection: some View {
+        Section("État de l'appareil") {
+            LabeledContent("Batterie") {
+                if let b = session.battery {
+                    HStack(spacing: 8) {
+                        Gauge(value: Double(min(b, 100)), in: 0...100) { EmptyView() }
+                            .gaugeStyle(.accessoryLinearCapacity)
+                            .tint(b > 20 ? .green : .red)
+                            .frame(width: 70)
+                        Text("\(b) %").monospacedDigit().foregroundStyle(b > 20 ? Color.primary : .red)
+                    }
+                } else {
+                    Text("non communiquée").foregroundStyle(.secondary)
+                }
+            }
+            if let rssi = session.rssi {
+                LabeledContent("Signal") {
+                    signalValue(rssi)
+                }
+            }
+        }
+    }
+
+    private func signalValue(_ rssi: Int) -> some View {
+        HStack(spacing: 8) {
+            if session.rssiHistory.count > 1 {
+                Sparkline(values: session.rssiHistory.map(Double.init),
+                          color: rssiColor(rssi), minValue: -100, maxValue: -30)
+                    .frame(width: 60, height: 24)
+            }
+            Text("\(rssi) dBm · \(proximity(rssi))")
+                .monospacedDigit()
+                .foregroundStyle(rssiColor(rssi))
+                .contentTransition(.numericText())
+        }
+    }
+
+    // 3. Actions.
+    @ViewBuilder private var alertSection: some View {
+        Section {
+            Button {
+                session.alert(2)
+            } label: {
+                Label("Faire sonner", systemImage: "speaker.wave.3")
+            }
+            Button {
+                session.alert(0)
+            } label: {
+                Label("Arrêter la sonnerie", systemImage: "speaker.slash")
+            }
+        } header: {
+            Text("Retrouver l'appareil")
+        } footer: {
+            Text("Fait sonner les porte-clés, traceurs et bracelets qui gèrent le service standard « Alerte immédiate ».")
+        }
+    }
+
+    // 4. Infos appareil (fabricant, modèle…).
+    @ViewBuilder private var infoSection: some View {
+        Section("Fiche de l'appareil") {
+            ForEach(session.info.keys.sorted(), id: \.self) { key in
+                InfoRow(label: key, value: session.info[key] ?? "")
+            }
+        }
+    }
+
+    // 5. État de la découverte.
+    @ViewBuilder private var discoverySection: some View {
+        Section {
+            HStack(spacing: 8) { ProgressView(); Text("Lecture de l'appareil…").foregroundStyle(.secondary) }
+        } footer: {
+            Text("Certains appareils (écouteurs, enceintes, téléphones) ne partagent aucune information sans appairage. Dans ce cas, seuls le signal et la batterie (si disponible) s'affichent.")
+        }
+    }
+
+    // 6. Détails techniques, repliés.
+    @ViewBuilder private var advancedSection: some View {
+        Section {
+            DisclosureGroup("Services et caractéristiques (avancé)") {
+                ForEach(session.services, id: \.self) { service in
+                    serviceRows(service)
+                }
+            }
+        } footer: {
+            Text("Pour explorer, lire et écrire les données brutes de l'appareil.")
+        }
+    }
+
+    private func serviceRows(_ service: CBService) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(GATTNames.service(service.uuid))
+                .font(.subheadline.weight(.semibold))
+            ForEach(service.characteristics ?? [], id: \.self) { c in
+                Button {
+                    selected = CharacteristicRef(c: c)
+                } label: {
+                    characteristicRow(c)
+                }
+                .foregroundStyle(.primary)
+                .padding(.leading, 8)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func characteristicRow(_ c: CBCharacteristic) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(GATTNames.characteristic(c.uuid)).font(.callout)
+                if let v = session.value(for: c) {
+                    Text(GATTFormat.describe(v, uuid: c.uuid))
+                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                } else {
+                    Text(GATTNames.properties(c.properties))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if c.isNotifying { Image(systemName: "bell.fill").foregroundStyle(.green).font(.caption) }
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
     }
 }
 
