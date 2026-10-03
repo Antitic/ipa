@@ -119,8 +119,16 @@ final class GATTSession: NSObject, ObservableObject, CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         objectWillChange.send()
-        for c in service.characteristics ?? [] where c.properties.contains(.read) {
-            peripheral.readValue(for: c)
+        for c in service.characteristics ?? [] {
+            if c.properties.contains(.read) {
+                peripheral.readValue(for: c)
+            }
+            // Batterie et fréquence cardiaque : s'abonner pour recevoir les mises à jour,
+            // car certains appareils n'envoient leur niveau que par notification.
+            if (c.uuid.uuidString == "2A19" || c.uuid.uuidString == "2A37"),
+               c.properties.contains(.notify) {
+                peripheral.setNotifyValue(true, for: c)
+            }
         }
     }
 

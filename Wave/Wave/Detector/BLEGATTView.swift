@@ -62,49 +62,87 @@ private struct GATTContent: View {
         }
     }
 
+    private var deviceName: String {
+        scanner.device(id)?.displayName ?? session.peripheral.name ?? "Appareil"
+    }
+
+    private var statusColor: Color {
+        switch session.state {
+        case .connected: return .green
+        case .connecting: return .orange
+        case .failed: return .red
+        default: return .secondary
+        }
+    }
+
+    private var isConnected: Bool { session.state == .connected }
+
     var body: some View {
         List {
+            // 1. En-tête : nom, état, bouton connexion.
             Section {
-                LabeledContent("État") {
-                    HStack(spacing: 6) {
-                        if session.state == .connecting { ProgressView() }
-                        Text(stateText)
+                HStack(spacing: 12) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.title2)
+                        .foregroundStyle(statusColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(deviceName).font(.headline)
+                        HStack(spacing: 5) {
+                            Circle().fill(statusColor).frame(width: 7, height: 7)
+                            Text(stateText).font(.caption).foregroundStyle(.secondary)
+                            if session.state == .connecting { ProgressView().controlSize(.mini) }
+                        }
                     }
+                    Spacer()
                 }
                 switch session.state {
                 case .connected, .connecting:
                     Button("Se déconnecter", role: .destructive) { scanner.disconnect(id) }
                 default:
-                    Button("Se connecter") { scanner.connect(id) }
+                    Button {
+                        scanner.connect(id)
+                    } label: {
+                        Label("Se connecter", systemImage: "link")
+                    }
                 }
             }
 
-            if session.state == .connected, let rssi = session.rssi {
-                Section {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(rssi) dBm")
-                                .font(.title.weight(.semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(rssiColor(rssi))
-                                .contentTransition(.numericText())
-                            Text(proximity(rssi)).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if session.rssiHistory.count > 1 {
-                            Sparkline(values: session.rssiHistory.map(Double.init),
-                                      color: rssiColor(rssi), minValue: -100, maxValue: -30)
-                                .frame(width: 120, height: 44)
+            // 2. Batterie + signal, toujours visibles quand connecté.
+            if isConnected {
+                Section("État de l'appareil") {
+                    LabeledContent("Batterie") {
+                        if let b = session.battery {
+                            HStack(spacing: 8) {
+                                Gauge(value: Double(min(b, 100)), in: 0...100) { EmptyView() }
+                                    .gaugeStyle(.accessoryLinearCapacity)
+                                    .tint(b > 20 ? .green : .red)
+                                    .frame(width: 70)
+                                Text("\(b) %").monospacedDigit().foregroundStyle(b > 20 ? .primary : .red)
+                            }
+                        } else {
+                            Text("non communiquée").foregroundStyle(.secondary)
                         }
                     }
-                } header: {
-                    Text("Signal en direct")
-                } footer: {
-                    Text("Mesuré une fois par seconde pendant la connexion : plus stable que le scan pour retrouver l'appareil. Rapproche-toi, le chiffre monte vers −30.")
+                    if let rssi = session.rssi {
+                        LabeledContent("Signal") {
+                            HStack(spacing: 8) {
+                                if session.rssiHistory.count > 1 {
+                                    Sparkline(values: session.rssiHistory.map(Double.init),
+                                              color: rssiColor(rssi), minValue: -100, maxValue: -30)
+                                        .frame(width: 60, height: 24)
+                                }
+                                Text("\(rssi) dBm · \(proximity(rssi))")
+                                    .monospacedDigit()
+                                    .foregroundStyle(rssiColor(rssi))
+                                    .contentTransition(.numericText())
+                            }
+                        }
+                    }
                 }
             }
 
-            if session.alertCharacteristic != nil {
+            // 3. Actions.
+            if isConnected && session.alertCharacteristic != nil {
                 Section {
                     Button {
                         session.alert(2)
@@ -119,78 +157,66 @@ private struct GATTContent: View {
                 } header: {
                     Text("Retrouver l'appareil")
                 } footer: {
-                    Text("Utilise le service standard « Alerte immédiate » (porte-clés, traceurs, certains bracelets).")
+                    Text("Fait sonner les porte-clés, traceurs et bracelets qui gèrent le service standard « Alerte immédiate ».")
                 }
             }
 
-            if session.battery != nil || !session.info.isEmpty {
-                Section("Informations") {
-                    if let b = session.battery {
-                        LabeledContent("Batterie") {
-                            HStack {
-                                Gauge(value: Double(min(b, 100)), in: 0...100) { EmptyView() }
-                                    .gaugeStyle(.accessoryLinearCapacity)
-                                    .tint(b > 20 ? .green : .red)
-                                    .frame(width: 80)
-                                Text("\(b) %").monospacedDigit()
-                            }
-                        }
-                    }
+            // 4. Infos appareil (fabricant, modèle…).
+            if !session.info.isEmpty {
+                Section("Fiche de l'appareil") {
                     ForEach(session.info.keys.sorted(), id: \.self) { key in
                         InfoRow(label: key, value: session.info[key] ?? "")
                     }
                 }
             }
 
-            if session.state == .connected && session.services.isEmpty {
+            // 5. État de la découverte.
+            if isConnected && session.services.isEmpty {
                 Section {
-                    ProgressView("Découverte des services…")
+                    HStack(spacing: 8) { ProgressView(); Text("Lecture de l'appareil…").foregroundStyle(.secondary) }
                 } footer: {
-                    Text("Certains appareils (écouteurs, enceintes, téléphones) ne publient aucun service lisible sans appairage : seul le signal en direct ci-dessus est alors disponible.")
+                    Text("Certains appareils (écouteurs, enceintes, téléphones) ne partagent aucune information sans appairage. Dans ce cas, seuls le signal et la batterie (si disponible) s'affichent.")
                 }
             }
 
-            ForEach(session.services, id: \.self) { service in
+            // 6. Détails techniques, repliés.
+            if isConnected && !session.services.isEmpty {
                 Section {
-                    ForEach(service.characteristics ?? [], id: \.self) { c in
-                        Button {
-                            selected = CharacteristicRef(c: c)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack {
-                                    Text(GATTNames.characteristic(c.uuid))
-                                    Spacer()
-                                    if c.isNotifying {
-                                        Image(systemName: "bell.fill").foregroundStyle(.green).font(.caption)
+                    DisclosureGroup("Services et caractéristiques (avancé)") {
+                        ForEach(session.services, id: \.self) { service in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(GATTNames.service(service.uuid))
+                                    .font(.subheadline.weight(.semibold))
+                                ForEach(service.characteristics ?? [], id: \.self) { c in
+                                    Button {
+                                        selected = CharacteristicRef(c: c)
+                                    } label: {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(GATTNames.characteristic(c.uuid)).font(.callout)
+                                                if let v = session.value(for: c) {
+                                                    Text(GATTFormat.describe(v, uuid: c.uuid))
+                                                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                                                } else {
+                                                    Text(GATTNames.properties(c.properties))
+                                                        .font(.caption).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            if c.isNotifying { Image(systemName: "bell.fill").foregroundStyle(.green).font(.caption) }
+                                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                                        }
+                                        .contentShape(Rectangle())
                                     }
-                                }
-                                Text(GATTNames.properties(c.properties))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                if let v = session.value(for: c) {
-                                    Text(GATTFormat.describe(v, uuid: c.uuid))
-                                        .font(.caption.monospaced())
-                                        .lineLimit(2)
+                                    .foregroundStyle(.primary)
+                                    .padding(.leading, 8)
                                 }
                             }
-                        }
-                        .foregroundStyle(.primary)
-                    }
-                } header: {
-                    Text("\(GATTNames.service(service.uuid)) · \(service.uuid.uuidString)")
-                }
-            }
-
-            if !session.log.isEmpty {
-                Section("Journal") {
-                    ForEach(Array(session.log.suffix(30).reversed())) { e in
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(e.date.formatted(date: .omitted, time: .standard))
-                                .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                            Text(e.text).font(.caption)
+                            .padding(.vertical, 2)
                         }
                     }
+                } footer: {
+                    Text("Pour explorer, lire et écrire les données brutes de l'appareil.")
                 }
             }
         }
