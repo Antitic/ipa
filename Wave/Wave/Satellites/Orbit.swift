@@ -38,11 +38,11 @@ enum Constellation: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .gps: return Theme.accent
+        case .gps: return Theme.green
         case .galileo: return Theme.blue
-        case .glonass: return Theme.danger
-        case .beidou: return Theme.warn
-        case .iss: return .white
+        case .glonass: return Theme.red
+        case .beidou: return Theme.orange
+        case .iss: return Theme.violet
         }
     }
 

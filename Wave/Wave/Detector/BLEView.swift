@@ -1,6 +1,25 @@
 import SwiftUI
 import CoreBluetooth
 
+extension DeviceCategory {
+    var colors: [Color] {
+        switch self {
+        case .camera: return [Theme.red, Theme.pink]
+        case .recorder: return [Theme.orange, Theme.red]
+        case .tracker: return [Theme.yellow, Theme.orange]
+        case .audio: return [Theme.pink, Theme.violet]
+        case .phone: return [Theme.blue, Theme.cyan]
+        case .computer: return [Theme.indigo, Theme.blue]
+        case .wearable: return [Theme.green, Theme.mint]
+        case .tv: return [Theme.violet, Theme.indigo]
+        case .input: return [Color.gray, Theme.blue]
+        case .beacon: return [Theme.teal, Theme.cyan]
+        case .iot: return [Theme.yellow, Theme.green]
+        case .unknown: return [Color.gray, Color.gray.opacity(0.7)]
+        }
+    }
+}
+
 struct BLEView: View {
     @StateObject private var scanner = BLEScanner()
     @State private var filter: Filter = .all
@@ -11,11 +30,16 @@ struct BLEView: View {
         var id: String { rawValue }
     }
 
-    private var filtered: [BLEDevice] {
-        scanner.devices.filter { d in
+    private func isSuspect(_ d: BLEDevice) -> Bool {
+        d.info.category.isSuspicious || d.info.alert != nil
+    }
+
+    var body: some View {
+        let devices = scanner.devices
+        let filtered = devices.filter { d in
             switch filter {
             case .all: break
-            case .suspects: if !(d.info.category.isSuspicious || d.info.alert != nil) { return false }
+            case .suspects: if !isSuspect(d) { return false }
             case .trackers: if d.info.category != .tracker { return false }
             case .named: if d.name == nil { return false }
             }
@@ -23,18 +47,14 @@ struct BLEView: View {
             let hay = [d.displayName, d.info.brand ?? "", d.info.model ?? "", d.info.category.rawValue].joined(separator: " ")
             return hay.localizedCaseInsensitiveContains(search)
         }
-    }
+        let suspects = devices.filter(isSuspect).count
+        let trackers = devices.filter { $0.info.category == .tracker }.count
 
-    private var suspectCount: Int {
-        scanner.devices.filter { $0.info.category.isSuspicious || $0.info.alert != nil }.count
-    }
-
-    var body: some View {
         List {
             Section {
-                statusCard
+                statusCard(total: devices.count, suspects: suspects, trackers: trackers)
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 8, trailing: 0))
                 Picker("Filtre", selection: $filter) {
                     ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -43,13 +63,18 @@ struct BLEView: View {
                 .listRowInsets(EdgeInsets())
             }
             Section {
+                if filtered.isEmpty {
+                    Text(scanner.isScanning ? "Recherche en cours…" : "Aucun appareil.")
+                        .foregroundStyle(Theme.dim)
+                        .waveRow()
+                }
                 ForEach(filtered) { d in
                     NavigationLink {
                         BLEDetailView(scanner: scanner, id: d.id)
                     } label: {
                         BLERow(device: d)
                     }
-                    .listRowBackground(Theme.card)
+                    .waveRow()
                 }
             } footer: {
                 Text("iOS masque l'adresse MAC réelle des appareils : chaque appareil reçoit un identifiant propre à ton iPhone. Beaucoup d'appareils changent aussi d'adresse toutes les 15 minutes environ.")
@@ -57,45 +82,52 @@ struct BLEView: View {
             }
         }
         .searchable(text: $search, prompt: "Nom, marque, type…")
-        .waveScreen()
+        .waveScreen(.bluetooth)
         .navigationTitle("Bluetooth")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button(scanner.isScanning ? "Mettre en pause" : "Reprendre") {
-                        if scanner.isScanning { scanner.stop() } else { scanner.start() }
+                    Button {
+                        scanner.togglePause()
+                    } label: {
+                        Label(scanner.isScanning ? "Mettre en pause" : "Reprendre",
+                              systemImage: scanner.isScanning ? "pause.fill" : "play.fill")
                     }
-                    Button("Effacer la liste", role: .destructive) { scanner.clear() }
+                    Button(role: .destructive) {
+                        scanner.clear()
+                    } label: {
+                        Label("Effacer la liste", systemImage: "trash")
+                    }
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
-        .onAppear { scanner.start() }
-        .onDisappear { scanner.stop() }
+        .onAppear { scanner.acquire() }
+        .onDisappear { scanner.release() }
     }
 
-    @ViewBuilder private var statusCard: some View {
+    private func statusCard(total: Int, suspects: Int, trackers: Int) -> some View {
         Card {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle().fill(Theme.blue.opacity(0.15)).frame(width: 52, height: 52)
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.title2)
-                        .foregroundStyle(Theme.blue)
-                        .symbolEffect(.variableColor.iterative, isActive: scanner.isScanning)
-                }
+                IconTile(symbol: Feature.bluetooth.symbol, colors: Feature.bluetooth.colors, size: 52)
+                    .symbolEffect(.variableColor.iterative, isActive: scanner.isScanning)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(stateText).font(.headline)
-                    Text("\(scanner.devices.count) appareils · \(suspectCount) à vérifier")
-                        .font(.subheadline)
-                        .foregroundStyle(suspectCount > 0 ? Theme.warn : Theme.dim)
+                    Text(stateText).font(.system(.headline, design: .rounded))
+                    Text(scanner.isScanning ? "Les appareils proches apparaissent en direct" : "Touche ⋯ pour reprendre")
+                        .font(.caption)
+                        .foregroundStyle(Theme.dim)
                 }
+            }
+            HStack(spacing: 10) {
+                StatTile(value: "\(total)", label: "appareils", color: Theme.blue)
+                StatTile(value: "\(suspects)", label: "à vérifier", color: suspects > 0 ? Theme.orange : Theme.green)
+                StatTile(value: "\(trackers)", label: "traceurs", color: trackers > 0 ? Theme.red : Theme.green)
             }
         }
     }
 
     private var stateText: String {
         switch scanner.state {
-        case .poweredOn: return scanner.isScanning ? "Scan en cours…" : "En pause"
+        case .poweredOn: return scanner.isScanning ? "Scan en cours" : "En pause"
         case .poweredOff: return "Bluetooth désactivé"
         case .unauthorized: return "Accès Bluetooth refusé (Réglages)"
         case .unsupported: return "Bluetooth non pris en charge"
@@ -109,18 +141,12 @@ struct BLERow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(iconColor.opacity(0.16))
-                    .frame(width: 40, height: 40)
-                Image(systemName: device.info.category.icon)
-                    .foregroundStyle(iconColor)
-            }
+            IconTile(symbol: device.info.category.icon, colors: device.info.category.colors, size: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.displayName).font(.callout.weight(.semibold)).lineLimit(1)
                 Text(subtitle).font(.caption).foregroundStyle(Theme.dim).lineLimit(1)
                 if device.info.alert != nil {
-                    Text("⚠︎ À vérifier").font(.caption2.weight(.semibold)).foregroundStyle(Theme.warn)
+                    Pill(text: "À vérifier", color: Theme.orange, symbol: "exclamationmark.triangle.fill")
                 }
             }
             Spacer(minLength: 6)
@@ -130,7 +156,7 @@ struct BLERow: View {
                 Text(device.distanceText).font(.caption2).foregroundStyle(Theme.dim)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
     }
 
     private var subtitle: String {
@@ -139,11 +165,6 @@ struct BLERow: View {
         if let m = device.info.model, m != device.displayName { parts.append(m) }
         if parts.isEmpty { parts.append(device.info.category.rawValue) }
         return parts.joined(separator: " · ")
-    }
-
-    private var iconColor: Color {
-        if device.info.category.isSuspicious || device.info.alert != nil { return Theme.warn }
-        return Theme.blue
     }
 }
 
@@ -158,17 +179,18 @@ struct BLEDetailView: View {
     var body: some View {
         ScrollView {
             if let d = device {
-                VStack(spacing: 14) {
+                VStack(spacing: 16) {
+                    header(d)
                     if let alert = d.info.alert {
                         Card {
                             Label(alert, systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(Theme.warn)
+                                .foregroundStyle(Theme.orange)
                                 .font(.callout)
                         }
                     }
                     hotCold(d)
                     Card {
-                        Text("Identification").font(.headline)
+                        SectionTitle(text: "Identification", symbol: "info.circle")
                         InfoRow(label: "Nom diffusé", value: d.name ?? "—")
                         InfoRow(label: "Marque", value: d.info.brand ?? "Inconnue")
                         InfoRow(label: "Modèle / type", value: d.info.model ?? d.info.category.rawValue)
@@ -180,26 +202,32 @@ struct BLEDetailView: View {
                     }
                     if !d.info.details.isEmpty {
                         Card {
-                            Text("Ce que l'appareil annonce").font(.headline)
+                            SectionTitle(text: "Ce que l'appareil annonce", symbol: "antenna.radiowaves.left.and.right")
                             ForEach(Array(d.info.details.enumerated()), id: \.offset) { item in
-                                Text("• " + item.element).font(.callout)
+                                Label(item.element, systemImage: "circle.fill")
+                                    .labelStyle(BulletLabelStyle(color: d.info.category.colors[0]))
+                                    .font(.callout)
                             }
                         }
                     }
                     if let m = d.manufacturerData {
                         Card {
-                            Text("Données brutes").font(.headline)
+                            SectionTitle(text: "Données brutes", symbol: "number")
                             Text(m.hex).font(.caption.monospaced()).textSelection(.enabled)
                             Text("ID iOS : \(d.id.uuidString)").font(.caption2.monospaced()).foregroundStyle(Theme.dim)
                         }
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             } else {
-                Text("Appareil plus à portée.").foregroundStyle(Theme.dim).padding(40)
+                ContentUnavailableView("Appareil plus à portée",
+                                       systemImage: "antenna.radiowaves.left.and.right.slash",
+                                       description: Text("Il n'émet plus depuis 2 minutes."))
+                    .padding(.top, 60)
             }
         }
-        .waveScreen()
+        .waveScreen(.bluetooth)
         .navigationTitle(device?.displayName ?? "Appareil")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: device?.rssi ?? -120) { _, rssi in
@@ -208,42 +236,62 @@ struct BLEDetailView: View {
         .onChange(of: beep) { _, on in
             if on { tone.start(amplitude: 0.12) } else { tone.stop() }
         }
-        .onDisappear { tone.stop() }
+        .onAppear { scanner.acquire() }
+        .onDisappear {
+            beep = false
+            tone.stop()
+            scanner.release()
+        }
+    }
+
+    private func header(_ d: BLEDevice) -> some View {
+        HStack(spacing: 14) {
+            IconTile(symbol: d.info.category.icon, colors: d.info.category.colors, size: 60)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(d.displayName)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .lineLimit(2)
+                Text([d.info.brand, d.info.category.rawValue].compactMap { $0 }.joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.dim)
+            }
+            Spacer()
+        }
+        .padding(.top, 8)
     }
 
     private func hotCold(_ d: BLEDevice) -> some View {
-        Card {
+        let level = max(0.03, min(1, Double(d.rssi + 100) / 65))
+        let colors = [rssiColor(d.rssi), rssiColor(d.rssi).opacity(0.6)]
+        return Card {
             HStack {
-                Text("Chaud / froid").font(.headline)
+                SectionTitle(text: "Chaud / froid", symbol: "flame.fill", color: rssiColor(d.rssi))
                 Spacer()
-                Toggle(isOn: $beep) { Image(systemName: beep ? "speaker.wave.2.fill" : "speaker.slash") }
-                    .toggleStyle(.button)
+                Button {
+                    beep.toggle()
+                } label: {
+                    Image(systemName: beep ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                }
+                .buttonStyle(CircleIconButtonStyle(color: beep ? rssiColor(d.rssi) : .primary))
+                .accessibilityLabel("Son")
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(d.rssi)")
-                    .font(.system(size: 54, weight: .bold, design: .rounded))
-                    .foregroundStyle(rssiColor(d.rssi))
-                    .contentTransition(.numericText())
-                Text("dBm").foregroundStyle(Theme.dim)
-                Spacer()
-                VStack(alignment: .trailing) {
-                    Text(proximity(d.rssi)).font(.headline).foregroundStyle(rssiColor(d.rssi))
-                    Text(d.distanceText).font(.caption).foregroundStyle(Theme.dim)
+            HStack(spacing: 20) {
+                ZStack {
+                    GaugeRing(progress: level, colors: [Theme.red, Theme.orange, Theme.teal, Theme.green], lineWidth: 14)
+                    VStack(spacing: 0) {
+                        Text(proximity(d.rssi))
+                            .font(.system(.headline, design: .rounded))
+                            .foregroundStyle(rssiColor(d.rssi))
+                        Text(d.distanceText).font(.caption).foregroundStyle(Theme.dim)
+                    }
+                }
+                .frame(width: 130, height: 130)
+                VStack(alignment: .leading, spacing: 4) {
+                    BigNumber(value: "\(d.rssi)", unit: "dBm", colors: colors, size: 44)
+                    Sparkline(values: d.history.map(Double.init), color: rssiColor(d.rssi), minValue: -100, maxValue: -30)
+                        .frame(height: 54)
                 }
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.faint)
-                    Capsule()
-                        .fill(LinearGradient(colors: [Theme.danger, Theme.warn, Theme.blue, Theme.accent],
-                                             startPoint: .leading, endPoint: .trailing))
-                        .frame(width: geo.size.width * CGFloat(max(0.03, min(1, Double(d.rssi + 100) / 65))))
-                        .animation(.easeOut(duration: 0.3), value: d.rssi)
-                }
-            }
-            .frame(height: 10)
-            Sparkline(values: d.history.map(Double.init), color: rssiColor(d.rssi), minValue: -100, maxValue: -30)
-                .frame(height: 60)
             Text("Déplace-toi lentement : plus le chiffre monte (vers −30), plus tu te rapproches. Active le son pour chercher sans regarder l'écran.")
                 .font(.caption).foregroundStyle(Theme.dim)
         }
@@ -262,6 +310,19 @@ struct BLEDetailView: View {
     private func durationText(_ t: TimeInterval) -> String {
         let s = Int(t)
         if s < 60 { return "\(s) s" }
-        return "\(s / 60) min \(s % 60) s"
+        if s < 3600 { return "\(s / 60) min \(s % 60) s" }
+        return "\(s / 3600) h \((s % 3600) / 60) min"
+    }
+}
+
+/// Puce colorée devant un texte.
+struct BulletLabelStyle: LabelStyle {
+    var color: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle().fill(color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+            configuration.title
+        }
     }
 }

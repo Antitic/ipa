@@ -42,19 +42,27 @@ final class UltrasoundAnalyzer: ObservableObject {
         if let s = fftSetup { vDSP_destroy_fftsetup(s) }
     }
 
+    /// Faux si l'écran a été quitté avant la réponse à la demande d'accès au micro :
+    /// sans ce garde-fou, le micro démarrait en arrière-plan après être sorti de l'écran.
+    private var wanted = false
+
     func start() {
+        wanted = true
         AVAudioSession.sharedInstance().requestRecordPermission { ok in
             DispatchQueue.main.async {
+                guard self.wanted else { return }
                 if ok { self.startEngine() } else { self.denied = true }
             }
         }
     }
 
     func stop() {
+        wanted = false
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
         engine = nil
         running = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     func resetPeaks() {
@@ -175,33 +183,50 @@ final class UltrasoundAnalyzer: ObservableObject {
 struct UltrasoundView: View {
     @StateObject private var analyzer = UltrasoundAnalyzer()
 
+    private var alerting: Bool { analyzer.ultraMargin > 22 }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 if analyzer.denied {
                     Card {
-                        Label("Micro refusé : autorise-le dans Réglages > Wave.", systemImage: "mic.slash")
+                        Label("Micro refusé", systemImage: "mic.slash.fill")
+                            .font(.headline)
                             .foregroundStyle(Theme.danger)
+                        Text("Autorise le micro pour Wave dans Réglages.").font(.footnote).foregroundStyle(Theme.dim)
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            Link("Ouvrir Réglages", destination: url).font(.callout.weight(.semibold))
+                        }
                     }
                 }
                 Card {
-                    HStack(alignment: .firstTextBaseline) {
+                    HStack(alignment: .top) {
+                        IconTile(symbol: alerting ? "exclamationmark.triangle.fill" : "waveform",
+                                 colors: alerting ? [Theme.red, Theme.pink] : Feature.ultrasound.colors, size: 48)
+                            .symbolEffect(.variableColor.iterative, isActive: analyzer.running && !alerting)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(analyzer.ultraMargin > 22 ? "Signal ultrasonore !" : "Pas de balise")
-                                .font(.headline)
-                                .foregroundStyle(analyzer.ultraMargin > 22 ? Theme.danger : Theme.accent)
-                            Text("Pic 17–\(Int(analyzer.sampleRate / 2000)) kHz : \(String(format: "%.2f", analyzer.ultraPeakFreq / 1000)) kHz, \(Int(analyzer.ultraMargin)) dB au-dessus du bruit")
-                                .font(.caption.monospacedDigit()).foregroundStyle(Theme.dim)
+                            Text(alerting ? "Signal ultrasonore !" : (analyzer.running ? "Écoute en cours" : "Démarrage…"))
+                                .font(.system(.headline, design: .rounded))
+                                .foregroundStyle(alerting ? Theme.danger : .primary)
+                            Text("Bande 17–\(Int(analyzer.sampleRate / 2000)) kHz")
+                                .font(.caption).foregroundStyle(Theme.dim)
                         }
                         Spacer()
                         Button { analyzer.resetPeaks() } label: { Image(systemName: "arrow.counterclockwise") }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(CircleIconButtonStyle(color: Theme.orange))
+                            .accessibilityLabel("Réinitialiser")
+                    }
+                    HStack(spacing: 10) {
+                        StatTile(value: String(format: "%.2f", analyzer.ultraPeakFreq / 1000), label: "kHz (pic)", color: Theme.orange)
+                        StatTile(value: "\(Int(analyzer.ultraMargin))", label: "dB au-dessus du bruit",
+                                 color: alerting ? Theme.red : Theme.green)
+                        StatTile(value: "\(analyzer.detections.count)", label: "détections", color: Theme.yellow)
                     }
                     SpectrumView(values: analyzer.spectrum, hold: analyzer.peakHold, nyquist: analyzer.sampleRate / 2)
                         .frame(height: 220)
                 }
                 Card {
-                    Text("Détections").font(.headline)
+                    SectionTitle(text: "Détections", symbol: "bell.badge")
                     if analyzer.detections.isEmpty {
                         Text("Aucune pour l'instant. Laisse l'iPhone posé quelques minutes près de la TV, d'une enceinte ou dans un magasin.")
                             .font(.callout).foregroundStyle(Theme.dim)
@@ -216,14 +241,15 @@ struct UltrasoundView: View {
                     }
                 }
                 Card {
-                    Text("À quoi ça sert").font(.headline)
+                    SectionTitle(text: "À quoi ça sert", symbol: "questionmark.circle")
                     Text("Certaines pubs TV, applis et magasins émettent des sons inaudibles (17–20 kHz) pour pister les téléphones à proximité. Des micros espions bon marché émettent aussi parfois un sifflement aigu. Le micro de l'iPhone capte jusqu'à environ 20 kHz.")
                         .font(.caption).foregroundStyle(Theme.dim)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .waveScreen()
+        .waveScreen(.ultrasound)
         .navigationTitle("Ultrasons")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { analyzer.start() }
@@ -242,20 +268,24 @@ struct SpectrumView: View {
     var body: some View {
         Canvas { ctx, size in
             let w = size.width, h = size.height - 16
-            // Zone ultrasonore
-            let ux = w * CGFloat(17_000 / nyquist)
-            ctx.fill(Path(CGRect(x: ux, y: 0, width: w - ux, height: h)), with: .color(Theme.danger.opacity(0.08)))
+            guard nyquist > 0 else { return }
+            // Zone ultrasonore (bornée si le micro échantillonne trop bas, ex. casque Bluetooth)
+            let ux = min(w, w * CGFloat(17_000 / nyquist))
+            if ux < w {
+                ctx.fill(Path(roundedRect: CGRect(x: ux, y: 0, width: w - ux, height: h), cornerRadius: 8),
+                         with: .color(Theme.red.opacity(0.10)))
+            }
             // Graduations tous les 4 kHz
             var f = 0.0
             while f <= nyquist {
                 let x = w * CGFloat(f / nyquist)
                 ctx.stroke(Path { p in p.move(to: CGPoint(x: x, y: 0)); p.addLine(to: CGPoint(x: x, y: h)) },
-                           with: .color(Theme.faint), lineWidth: 1)
-                ctx.draw(Text("\(Int(f / 1000))k").font(.system(size: 9)).foregroundColor(Theme.dim),
+                           with: .color(Color.secondary.opacity(0.18)), lineWidth: 1)
+                ctx.draw(Text("\(Int(f / 1000))k").font(.system(size: 9, weight: .medium, design: .rounded)).foregroundColor(.secondary),
                          at: CGPoint(x: min(max(x, 8), w - 8), y: h + 8))
                 f += 4000
             }
-            func path(_ v: [Float]) -> Path {
+            func path(_ v: [Float], closed: Bool) -> Path {
                 var p = Path()
                 guard v.count > 1 else { return p }
                 for (i, d) in v.enumerated() {
@@ -264,10 +294,21 @@ struct SpectrumView: View {
                     let y = h * (1 - CGFloat(t))
                     if i == 0 { p.move(to: CGPoint(x: x, y: y)) } else { p.addLine(to: CGPoint(x: x, y: y)) }
                 }
+                if closed {
+                    p.addLine(to: CGPoint(x: w, y: h))
+                    p.addLine(to: CGPoint(x: 0, y: h))
+                    p.closeSubpath()
+                }
                 return p
             }
-            ctx.stroke(path(hold), with: .color(Theme.violet.opacity(0.5)), lineWidth: 1)
-            ctx.stroke(path(values), with: .color(Theme.accent), lineWidth: 1.6)
+            ctx.fill(path(values, closed: true), with: .linearGradient(
+                Gradient(colors: [Theme.orange.opacity(0.45), Theme.yellow.opacity(0.05)]),
+                startPoint: .zero, endPoint: CGPoint(x: 0, y: h)))
+            ctx.stroke(path(hold, closed: false), with: .color(Theme.violet.opacity(0.55)), lineWidth: 1)
+            ctx.stroke(path(values, closed: false),
+                       with: .linearGradient(Gradient(colors: [Theme.orange, Theme.yellow, Theme.red]),
+                                             startPoint: .zero, endPoint: CGPoint(x: w, y: 0)),
+                       lineWidth: 1.8)
         }
     }
 }

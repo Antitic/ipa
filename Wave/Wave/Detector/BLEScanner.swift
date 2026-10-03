@@ -11,6 +11,32 @@ final class BLEScanner: NSObject, ObservableObject, CBCentralManagerDelegate {
     private var store: [UUID: BLEDevice] = [:]
     private var wantsScan = false
     private var publishTimer: Timer?
+    /// Nombre d'écrans qui utilisent le scan (liste + fiche). Le scan ne s'arrête que
+    /// quand plus aucun écran n'en a besoin : auparavant, ouvrir la fiche d'un appareil
+    /// déclenchait `onDisappear` de la liste et coupait le scan (chaud/froid figé).
+    private var users = 0
+    private var paused = false
+
+    func acquire() {
+        users += 1
+        if !paused { start() }
+    }
+
+    func release() {
+        users = max(0, users - 1)
+        if users == 0 { stop() }
+    }
+
+    /// Pause / reprise demandée par l'utilisateur.
+    func togglePause() {
+        if isScanning {
+            paused = true
+            stop()
+        } else {
+            paused = false
+            start()
+        }
+    }
 
     func start() {
         wantsScan = true
@@ -20,9 +46,12 @@ final class BLEScanner: NSObject, ObservableObject, CBCentralManagerDelegate {
             beginScan()
         }
         if publishTimer == nil {
-            publishTimer = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
                 self?.publish()
             }
+            // Mode « common » : la liste continue de se mettre à jour pendant le défilement.
+            RunLoop.main.add(timer, forMode: .common)
+            publishTimer = timer
         }
     }
 
@@ -32,6 +61,7 @@ final class BLEScanner: NSObject, ObservableObject, CBCentralManagerDelegate {
         isScanning = false
         publishTimer?.invalidate()
         publishTimer = nil
+        publish()
     }
 
     func clear() {

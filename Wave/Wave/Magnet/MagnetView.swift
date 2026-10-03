@@ -70,13 +70,13 @@ struct MagnetView: View {
         var id: String { rawValue }
     }
 
-    private let earthField = 47.0   // valeur typique en Île-de-France, en µT
+    private let earthField = 47.0   // valeur typique en France, en µT
 
     private var anomaly: Double { abs(model.field - earthField) }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 Picker("Mode", selection: $mode) {
                     ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -85,11 +85,11 @@ struct MagnetView: View {
                 if mode == .field { fieldCard } else { metalCard }
 
                 Card {
-                    Text("Composantes").font(.headline)
-                    HStack {
-                        axis("X", model.vector.x)
-                        axis("Y", model.vector.y)
-                        axis("Z", model.vector.z)
+                    SectionTitle(text: "Composantes (µT)", symbol: "move.3d")
+                    HStack(spacing: 10) {
+                        axis("X", model.vector.x, Theme.red)
+                        axis("Y", model.vector.y, Theme.green)
+                        axis("Z", model.vector.z, Theme.blue)
                     }
                     if !model.calibrated {
                         Label("Magnétomètre non calibré : fais des 8 avec l'iPhone pendant quelques secondes.",
@@ -98,21 +98,26 @@ struct MagnetView: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .waveScreen()
+        .waveScreen(.magnet)
         .navigationTitle("Magnéto")
         .onAppear { model.start() }
         .onDisappear {
             model.stop()
             tone.stop()
+            // L'onglet reste en mémoire : sans cette remise à zéro, le bouton son restait
+            // « activé » au retour alors que le son était coupé.
+            sound = false
         }
         .onChange(of: model.field) { _, _ in updateTone() }
         .onChange(of: sound) { _, on in
-            if on { tone.start(amplitude: 0) ; updateTone() } else { tone.stop() }
+            if on { tone.start(amplitude: 0); updateTone() } else { tone.stop() }
         }
         .onChange(of: mode) { _, m in
             if m == .metal && model.baseline == nil { model.tare() }
+            updateTone()
         }
     }
 
@@ -125,59 +130,82 @@ struct MagnetView: View {
 
     private var fieldCard: some View {
         Card {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(String(format: "%.1f", model.field))
-                    .font(.system(size: 60, weight: .bold, design: .rounded))
-                    .foregroundStyle(color(anomaly))
-                    .contentTransition(.numericText())
-                Text("µT").font(.title3).foregroundStyle(Theme.dim)
+            HStack {
+                SectionTitle(text: "Intensité", symbol: "location.north.circle.fill", color: color(anomaly))
                 Spacer()
                 soundToggle
             }
-            Text(anomalyText).font(.headline).foregroundStyle(color(anomaly))
+            HStack(spacing: 20) {
+                ZStack {
+                    GaugeRing(progress: min(1, model.field / 200), colors: colors(anomaly), lineWidth: 16)
+                    VStack(spacing: 0) {
+                        Text(String(format: "%.0f", model.field))
+                            .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text("µT").font(.caption.weight(.semibold)).foregroundStyle(Theme.dim)
+                    }
+                }
+                .frame(width: 140, height: 140)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(anomalyText)
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                        .foregroundStyle(color(anomaly))
+                    Text("Écart : \(String(format: "%.0f", anomaly)) µT")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(Theme.dim)
+                    Text("Référence terrestre ≈ \(Int(earthField)) µT")
+                        .font(.caption)
+                        .foregroundStyle(Theme.dim)
+                }
+            }
             Sparkline(values: model.history, color: color(anomaly))
                 .frame(height: 80)
-            Text("Le champ terrestre vaut environ \(Int(earthField)) µT ici. Un écart signale du métal ferreux, un aimant, un haut-parleur ou un appareil électrique proche. Promène l'iPhone lentement le long des murs et des meubles pour repérer les anomalies.")
+            Text("Un écart signale du métal ferreux, un aimant, un haut-parleur ou un appareil électrique proche. Promène l'iPhone lentement le long des murs et des meubles pour repérer les anomalies.")
                 .font(.caption).foregroundStyle(Theme.dim)
         }
     }
 
     private var metalCard: some View {
-        Card {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(String(format: "%+.1f", model.field - (model.baseline ?? model.field)))
-                    .font(.system(size: 60, weight: .bold, design: .rounded))
-                    .foregroundStyle(color(model.delta))
-                    .contentTransition(.numericText())
-                Text("µT").font(.title3).foregroundStyle(Theme.dim)
+        let delta = model.field - (model.baseline ?? model.field)
+        return Card {
+            HStack {
+                SectionTitle(text: "Détecteur", symbol: "scope", color: color(model.delta))
                 Spacer()
                 soundToggle
             }
+            BigNumber(value: String(format: "%+.1f", delta), unit: "µT", colors: colors(model.delta), size: 60)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.faint)
-                    Capsule().fill(color(model.delta))
+                    Capsule().fill(Theme.cardHi)
+                    Capsule()
+                        .fill(LinearGradient(colors: colors(model.delta), startPoint: .leading, endPoint: .trailing))
                         .frame(width: geo.size.width * CGFloat(min(1, max(0.02, model.delta / 100))))
                         .animation(.easeOut(duration: 0.15), value: model.delta)
                 }
             }
             .frame(height: 14)
             Text(model.delta > 30 ? "Métal tout proche !" : model.delta > 8 ? "Métal à proximité" : "Rien de notable")
-                .font(.headline).foregroundStyle(color(model.delta))
+                .font(.system(.headline, design: .rounded)).foregroundStyle(color(model.delta))
             Button {
                 model.tare()
             } label: {
-                Label("Tarer (remettre à zéro ici)", systemImage: "scope")
+                Label("Remettre à zéro ici", systemImage: "scope")
             }
-            .buttonStyle(.bordered)
-            Text("Tare loin de tout objet métallique, puis approche le haut de l'iPhone (où se trouve le magnétomètre) à quelques centimètres. Détecte le fer et l'acier (clous, vis, rails, câbles sous tension), pas l'or, l'alu ni le cuivre.")
+            .buttonStyle(GradientButtonStyle(colors: Feature.magnet.colors))
+            Text("Remets à zéro loin de tout objet métallique, puis approche le haut de l'iPhone (où se trouve le magnétomètre) à quelques centimètres. Détecte le fer et l'acier (clous, vis, rails, câbles sous tension), pas l'or, l'alu ni le cuivre.")
                 .font(.caption).foregroundStyle(Theme.dim)
         }
     }
 
     private var soundToggle: some View {
-        Toggle(isOn: $sound) { Image(systemName: sound ? "speaker.wave.2.fill" : "speaker.slash") }
-            .toggleStyle(.button)
+        Button {
+            sound.toggle()
+        } label: {
+            Image(systemName: sound ? "speaker.wave.2.fill" : "speaker.slash.fill")
+        }
+        .buttonStyle(CircleIconButtonStyle(color: sound ? Theme.orange : .primary))
+        .accessibilityLabel("Son")
     }
 
     private var anomalyText: String {
@@ -191,18 +219,31 @@ struct MagnetView: View {
 
     private func color(_ d: Double) -> Color {
         switch d {
-        case ..<8: return Theme.accent
-        case ..<25: return Theme.blue
-        case ..<80: return Theme.warn
-        default: return Theme.danger
+        case ..<8: return Theme.green
+        case ..<25: return Theme.teal
+        case ..<80: return Theme.orange
+        default: return Theme.red
         }
     }
 
-    private func axis(_ name: String, _ v: Double) -> some View {
-        VStack(spacing: 2) {
-            Text(name).font(.caption).foregroundStyle(Theme.dim)
-            Text(String(format: "%.1f", v)).font(.callout.monospacedDigit())
+    private func colors(_ d: Double) -> [Color] {
+        switch d {
+        case ..<8: return [Theme.green, Theme.mint]
+        case ..<25: return [Theme.teal, Theme.blue]
+        case ..<80: return [Theme.orange, Theme.yellow]
+        default: return [Theme.red, Theme.pink]
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    private func axis(_ name: String, _ v: Double, _ c: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(name).font(.caption.weight(.bold)).foregroundStyle(c)
+            Text(String(format: "%.1f", v))
+                .font(.system(.callout, design: .rounded).weight(.semibold).monospacedDigit())
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(c.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

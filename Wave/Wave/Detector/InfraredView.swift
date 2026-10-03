@@ -17,7 +17,11 @@ final class InfraredDetector: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private var frameCount = 0
     private var currentDevice: AVCaptureDevice?
 
+    /// Faux si l'écran a été quitté avant la réponse à la demande d'accès à la caméra.
+    private var wanted = false
+
     func start() {
+        wanted = true
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             configure()
@@ -25,7 +29,7 @@ final class InfraredDetector: NSObject, ObservableObject, AVCaptureVideoDataOutp
             AVCaptureDevice.requestAccess(for: .video) { ok in
                 DispatchQueue.main.async {
                     self.authorized = ok
-                    if ok { self.configure() }
+                    if ok && self.wanted { self.configure() }
                 }
             }
         default:
@@ -34,6 +38,7 @@ final class InfraredDetector: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     func stop() {
+        wanted = false
         queue.async {
             if self.session.isRunning { self.session.stopRunning() }
         }
@@ -47,8 +52,16 @@ final class InfraredDetector: NSObject, ObservableObject, AVCaptureVideoDataOutp
         configure()
     }
 
+    /// Allumage demandé alors que la caméra arrière n'était pas encore prête.
+    private var pendingTorch = false
+
     func setTorch(_ on: Bool) {
-        guard let dev = currentDevice, dev.hasTorch else { torchOn = false; return }
+        guard let dev = currentDevice, dev.hasTorch else {
+            // La caméra arrière est peut-être encore en cours de configuration.
+            pendingTorch = on && !usingFront
+            torchOn = false
+            return
+        }
         do {
             try dev.lockForConfiguration()
             if on { try dev.setTorchModeOn(level: 1.0) } else { dev.torchMode = .off }
@@ -87,6 +100,10 @@ final class InfraredDetector: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 self.currentDevice = device
                 self.running = true
                 self.spots = []
+                if self.pendingTorch {
+                    self.pendingTorch = false
+                    self.setTorch(true)
+                }
             }
         }
     }
@@ -184,7 +201,7 @@ final class PreviewUIView: UIView {
             let size: CGFloat = 44
             let ring = CAShapeLayer()
             ring.path = UIBezierPath(ovalIn: CGRect(x: r.midX - size / 2, y: r.midY - size / 2, width: size, height: size)).cgPath
-            ring.strokeColor = UIColor(red: 1, green: 0.38, blue: 0.43, alpha: 1).cgColor
+            ring.strokeColor = UIColor.systemPink.cgColor
             ring.fillColor = UIColor.clear.cgColor
             ring.lineWidth = 3
             overlay.addSublayer(ring)
@@ -218,50 +235,73 @@ struct InfraredView: View {
                 CameraPreview(session: detector.session, spots: detector.spots)
                     .ignoresSafeArea()
             } else {
-                Text("Autorise l'accès à la caméra dans Réglages > Wave.")
-                    .foregroundStyle(Theme.dim).padding()
-            }
-            VStack {
-                Card {
-                    Text(detector.usingFront ? "Mode infrarouge (caméra frontale)" : "Mode reflet d'objectif (caméra arrière)")
-                        .font(.headline)
-                    Text(detector.usingFront
-                         ? "Éteins la lumière et balaye la pièce lentement avec l'écran tourné vers les murs. Une LED de vision nocturne apparaît comme un point blanc ou violet fixe, invisible à l'œil nu."
-                         : "Allume la lampe et balaye lentement les objets (détecteurs de fumée, réveils, chargeurs, peluches). Un objectif renvoie un petit reflet brillant qui reste fixe quand tu bouges.")
-                        .font(.caption).foregroundStyle(Theme.dim)
-                    if detector.sceneTooBright {
-                        Label("Trop de lumière : éteins la pièce pour une détection fiable.", systemImage: "sun.max")
-                            .font(.caption.weight(.semibold)).foregroundStyle(Theme.warn)
-                    } else if !detector.spots.isEmpty {
-                        Label("\(detector.spots.count) point\(detector.spots.count > 1 ? "s" : "") lumineux repéré\(detector.spots.count > 1 ? "s" : "")",
-                              systemImage: "scope")
-                            .font(.caption.weight(.semibold)).foregroundStyle(Theme.danger)
+                ContentUnavailableView {
+                    Label("Caméra non autorisée", systemImage: "camera.fill")
+                } description: {
+                    Text("Autorise l'accès à la caméra dans Réglages › Wave.")
+                } actions: {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        Link("Ouvrir Réglages", destination: url)
                     }
                 }
-                .opacity(0.94)
+                .foregroundStyle(.white)
+            }
+            VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        IconTile(symbol: detector.usingFront ? "camera.aperture" : "flashlight.on.fill",
+                                 colors: Feature.infrared.colors, size: 34)
+                        Text(detector.usingFront ? "Infrarouge · caméra frontale" : "Reflets d'objectif · caméra arrière")
+                            .font(.system(.headline, design: .rounded))
+                    }
+                    Text(detector.usingFront
+                         ? "Éteins la lumière et balaye la pièce lentement, écran tourné vers les murs. Une LED de vision nocturne apparaît comme un point blanc ou violet fixe, invisible à l'œil nu."
+                         : "Allume la lampe et balaye lentement les objets (détecteurs de fumée, réveils, chargeurs, peluches). Un objectif renvoie un petit reflet brillant qui reste fixe quand tu bouges.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if detector.sceneTooBright {
+                        Pill(text: "Trop de lumière : éteins la pièce", color: Theme.yellow, symbol: "sun.max.fill")
+                    } else if !detector.spots.isEmpty {
+                        Pill(text: "\(detector.spots.count) point\(detector.spots.count > 1 ? "s" : "") lumineux repéré\(detector.spots.count > 1 ? "s" : "")",
+                             color: Theme.pink, symbol: "scope")
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .environment(\.colorScheme, .dark)
+
                 Spacer()
+
                 HStack(spacing: 14) {
                     Button {
                         detector.switchCamera()
                     } label: {
-                        Label(detector.usingFront ? "Arrière" : "Frontale", systemImage: "arrow.triangle.2.circlepath.camera")
+                        Label(detector.usingFront ? "Caméra arrière" : "Caméra frontale",
+                              systemImage: "arrow.triangle.2.circlepath.camera.fill")
                     }
+                    .buttonStyle(GradientButtonStyle(colors: Feature.infrared.colors))
                     if !detector.usingFront {
                         Button {
                             detector.setTorch(!detector.torchOn)
                         } label: {
-                            Label("Lampe", systemImage: detector.torchOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                            Image(systemName: detector.torchOn ? "flashlight.on.fill" : "flashlight.off.fill")
+                                .font(.title3)
+                                .foregroundStyle(detector.torchOn ? Theme.yellow : .white)
+                                .frame(width: 48, height: 48)
+                                .background(.ultraThinMaterial, in: Circle())
                         }
+                        .environment(\.colorScheme, .dark)
+                        .accessibilityLabel("Lampe")
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.card)
                 .padding(.bottom, 24)
             }
             .padding(16)
         }
         .navigationTitle("Infrarouge")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear { detector.start() }
         .onDisappear { detector.stop() }
     }

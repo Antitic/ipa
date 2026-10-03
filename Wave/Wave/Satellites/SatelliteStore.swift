@@ -13,6 +13,10 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        // Pas besoin de mises à jour fréquentes pour une carte du ciel : on évite de
+        // redessiner tout l'écran à chaque micro-mouvement.
+        manager.distanceFilter = 200
+        manager.headingFilter = 3
         status = manager.authorizationStatus
     }
 
@@ -39,12 +43,13 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let last = locations.last { location = last }
+        guard let last = locations.last, last.horizontalAccuracy >= 0 else { return }
+        location = last
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
-        let h = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
-        heading = h
+        guard newHeading.headingAccuracy >= 0 else { return }
+        heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
@@ -59,83 +64,119 @@ final class SatelliteStore: ObservableObject {
     @Published var error: String?
     @Published var dataDate: Date?
 
-    private let maxAge: TimeInterval = 6 * 3600
+    private static let maxAge: TimeInterval = 6 * 3600
     private var lastPassObserver: CLLocation?
+    private var lastPassDate: Date?
+    private var computing = false
 
-    private func cacheURL(_ c: Constellation) -> URL {
+    private nonisolated static func cacheURL(_ c: Constellation) -> URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("celestrak-\(c.rawValue).json")
+    }
+
+    private struct LoadResult: Sendable {
+        let constellation: Constellation
+        let satellites: [Satellite]
+        let date: Date?
+        let failed: Bool
     }
 
     func load(force: Bool = false) async {
         guard !loading else { return }
         loading = true
         error = nil
-        var all: [Satellite] = []
-        var failures: [String] = []
-        var oldest: Date?
 
-        for c in Constellation.allCases {
-            let file = cacheURL(c)
-            var data: Data?
-            var fileDate: Date?
-            if let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
-               let mod = attrs[.modificationDate] as? Date {
-                fileDate = mod
-                if !force && Date().timeIntervalSince(mod) < maxAge {
-                    data = try? Data(contentsOf: file)
-                }
+        // Les cinq constellations en parallèle, téléchargement et décodage hors du fil principal.
+        let results = await withTaskGroup(of: LoadResult.self) { group -> [LoadResult] in
+            for c in Constellation.allCases {
+                group.addTask { await SatelliteStore.fetch(c, force: force) }
             }
-            if data == nil {
-                do {
-                    let url = URL(string: "https://celestrak.org/NORAD/elements/gp.php?\(c.query)&FORMAT=json")!
-                    var req = URLRequest(url: url, timeoutInterval: 20)
-                    req.setValue("Wave-iOS/1.0", forHTTPHeaderField: "User-Agent")
-                    let (d, resp) = try await URLSession.shared.data(for: req)
-                    if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
-                        throw URLError(.badServerResponse)
-                    }
-                    _ = try JSONDecoder().decode([OMM].self, from: d)
-                    try? d.write(to: file)
-                    data = d
-                    fileDate = Date()
-                } catch {
-                    // Repli sur le cache, même ancien.
-                    data = try? Data(contentsOf: file)
-                    if data == nil { failures.append(c.rawValue) }
-                }
-            }
-            if let data, let omms = try? JSONDecoder().decode([OMM].self, from: data) {
-                all += omms.compactMap { Satellite(omm: $0, constellation: c) }
-                if let fd = fileDate { oldest = min(oldest ?? fd, fd) }
-            }
+            var all: [LoadResult] = []
+            for await r in group { all.append(r) }
+            return all
         }
 
-        satellites = all
-        dataDate = oldest
+        let ordered = Constellation.allCases.compactMap { c in results.first { $0.constellation == c } }
+        satellites = ordered.flatMap(\.satellites)
+        dataDate = ordered.compactMap(\.date).min()
+        let failures = ordered.filter(\.failed).map(\.constellation.rawValue)
         if !failures.isEmpty {
-            error = "Téléchargement impossible : \(failures.joined(separator: ", "))"
+            error = "Téléchargement impossible : \(failures.joined(separator: ", ")). Vérifie ta connexion puis réessaie."
         }
         loading = false
         lastPassObserver = nil
     }
 
+    private nonisolated static func fetch(_ c: Constellation, force: Bool) async -> LoadResult {
+        let file = cacheURL(c)
+        var data: Data?
+        var fileDate: Date?
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
+           let mod = attrs[.modificationDate] as? Date {
+            fileDate = mod
+            if !force && Date().timeIntervalSince(mod) < maxAge {
+                data = try? Data(contentsOf: file)
+            }
+        }
+        if data == nil {
+            do {
+                let url = URL(string: "https://celestrak.org/NORAD/elements/gp.php?\(c.query)&FORMAT=json")!
+                var req = URLRequest(url: url, timeoutInterval: 15)
+                req.setValue("Wave-iOS/1.0", forHTTPHeaderField: "User-Agent")
+                let (d, resp) = try await URLSession.shared.data(for: req)
+                if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
+                    throw URLError(.badServerResponse)
+                }
+                _ = try JSONDecoder().decode([OMM].self, from: d)
+                try? d.write(to: file)
+                data = d
+                fileDate = Date()
+            } catch {
+                // Repli sur le cache, même ancien (CelesTrak limite aussi les téléchargements répétés).
+                data = try? Data(contentsOf: file)
+            }
+        }
+        guard let data, let omms = try? JSONDecoder().decode([OMM].self, from: data) else {
+            return LoadResult(constellation: c, satellites: [], date: nil, failed: true)
+        }
+        return LoadResult(constellation: c,
+                          satellites: omms.compactMap { Satellite(omm: $0, constellation: c) },
+                          date: fileDate,
+                          failed: false)
+    }
+
     func recompute(for location: CLLocation, at date: Date = Date()) {
+        guard !computing, !satellites.isEmpty else { return }
+        computing = true
+        let sats = satellites
         let obs = Observer(location: location)
-        positions = satellites.map { sat in
-            let p = sat.ecef(at: date)
-            let look = obs.look(at: p)
-            let r = (p.x * p.x + p.y * p.y + p.z * p.z).squareRoot()
-            return SatPosition(sat: sat, az: look.az, el: look.el, range: look.range, altitude: r - Satellite.re)
+        Task.detached(priority: .userInitiated) {
+            let result = SatelliteStore.computePositions(sats, observer: obs, at: date)
+            await MainActor.run {
+                self.positions = result
+                self.computing = false
+            }
         }
 
-        let needsPasses = lastPassObserver.map { $0.distance(from: location) > 20_000 } ?? true
-        if needsPasses, let iss = satellites.first(where: { $0.constellation == .iss }) {
+        // Passages de l'ISS : à recalculer quand on bouge beaucoup ou toutes les 6 heures.
+        let moved = lastPassObserver.map { $0.distance(from: location) > 20_000 } ?? true
+        let stale = lastPassDate.map { date.timeIntervalSince($0) > 6 * 3600 } ?? true
+        if moved || stale, let iss = sats.first(where: { $0.constellation == .iss }) {
             lastPassObserver = location
+            lastPassDate = date
             Task.detached(priority: .utility) {
                 let passes = SatelliteStore.computePasses(sat: iss, observer: obs, from: date)
                 await MainActor.run { self.issPasses = passes }
             }
+        }
+    }
+
+    nonisolated static func computePositions(_ sats: [Satellite], observer obs: Observer, at date: Date) -> [SatPosition] {
+        sats.map { sat in
+            let p = sat.ecef(at: date)
+            let look = obs.look(at: p)
+            let r = (p.x * p.x + p.y * p.y + p.z * p.z).squareRoot()
+            return SatPosition(sat: sat, az: look.az, el: look.el, range: look.range, altitude: r - Satellite.re)
         }
     }
 

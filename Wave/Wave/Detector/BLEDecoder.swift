@@ -146,17 +146,18 @@ enum BLEDecoder {
         ("ruuvi", "Ruuvi"), ("esp32", "Espressif"),
     ]
 
-    static let cameraWords = ["cam", "ipc", "dvr", "nvr", "spy", "hidden", "v380", "a9 ", "eken", "yoosee",
+    // Mots repérés au début ou à la fin d'un mot (« cam » ne doit pas déclencher pour « Camille »).
+    static let cameraWords = ["cam ", " cam-", "-cam", "_cam", "webcam", "camera", "caméra", " ipc", "dvr", "nvr", "spy", "hidden", "v380", "a9 ", "eken", "yoosee",
                               "icsee", "xmeye", "camhi", "lookcam", "hdwificam", "wificam", "minicam",
                               "bodycam", "dashcam", "gopro", "insta360", "osmo"]
     static let recorderWords = ["recorder", "voice rec", "rec-", "dictaphone", "audio rec", "spy mic",
                                 "wireless mic", "lavalier", "rode", "hollyland", "dji mic", "mic "]
     static let audioWords = ["buds", "pods", "headphone", "headset", "earbud", "speaker", "soundbar",
                              "sound", "audio", "wh-", "wf-", "boom", "flip", "qc", "jbl", "bose"]
-    static let wearableWords = ["watch", "band", "fit", "ring", "hrm", "polar h", "versa", "charge "]
+    static let wearableWords = ["watch", " band", "fitbit", " fit ", " ring ", "oura", "hrm", "polar h", "versa", "charge "]
     static let tvWords = ["[tv]", " tv", "bravia", "chromecast", "fire tv", "roku", "projector", "projecteur"]
     static let phoneWords = ["iphone", "ipad", "galaxy", "pixel", "phone", "redmi", "oneplus"]
-    static let computerWords = ["macbook", "imac", "laptop", "desktop-", "pc", "thinkpad", "surface"]
+    static let computerWords = ["macbook", "imac", "laptop", "desktop-", " pc ", "-pc ", "thinkpad", "surface"]
     static let inputWords = ["keyboard", "clavier", "mouse", "souris", "trackpad", "mx ", "remote", "controller"]
 
     static func decode(_ d: BLEDevice) -> BLEInfo {
@@ -309,11 +310,10 @@ enum BLEDecoder {
                     info.model = "AirTag ou objet Localiser"
                     info.alert = "Objet du réseau Localiser séparé de son propriétaire (AirTag, AirPods, accessoire…). S'il te suit, vérifie tes affaires."
                 } else {
+                    // Annonce courte : appareil Apple proche de son propriétaire (iPhone, AirTag, AirPods…).
+                    // Ce n'est pas un signe de pistage : on ne le classe plus comme traceur.
                     info.details.append("Réseau Localiser (appareil proche de son propriétaire)")
-                    if info.category == .unknown {
-                        info.category = .tracker
-                        info.model = info.model ?? "Appareil Localiser"
-                    }
+                    if info.model == nil { info.model = "Appareil Apple (Localiser)" }
                 }
             case 0x13, 0x16:
                 info.details.append("Apple (message 0x\(String(format: "%02X", type)))")

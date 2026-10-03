@@ -118,7 +118,7 @@ struct NetworkInfoView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 connectionCard
                 speedCard
                 publicCard
@@ -126,9 +126,10 @@ struct NetworkInfoView: View {
                 Text("Le nom du Wi‑Fi et sa puissance ne sont pas accessibles aux applis installées hors App Store sur iOS.")
                     .font(.caption2).foregroundStyle(Theme.dim).padding(.horizontal, 4)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .waveScreen()
+        .waveScreen(.network)
         .navigationTitle("Réseau")
         .refreshable { await model.loadPublicIP() }
         .onAppear { model.start() }
@@ -142,21 +143,21 @@ struct NetworkInfoView: View {
         return ("Connecté", "network")
     }
 
+    private var isOnline: Bool { model.path?.status == .satisfied }
+
     private var connectionCard: some View {
         Card {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle().fill(Theme.accent.opacity(0.15)).frame(width: 52, height: 52)
-                    Image(systemName: connectionType.1).font(.title2).foregroundStyle(Theme.accent)
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(connectionType.0).font(.title3.weight(.bold))
+                IconTile(symbol: connectionType.1,
+                         colors: isOnline ? Feature.network.colors : [Theme.red, Theme.orange], size: 56)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(connectionType.0).font(.system(.title2, design: .rounded).weight(.bold))
                     if let p = model.path {
                         HStack(spacing: 6) {
-                            if p.supportsIPv4 { Pill(text: "IPv4") }
+                            if p.supportsIPv4 { Pill(text: "IPv4", color: Theme.green) }
                             if p.supportsIPv6 { Pill(text: "IPv6", color: Theme.blue) }
                             if p.isExpensive { Pill(text: "Coûteux", color: Theme.warn) }
-                            if p.isConstrained { Pill(text: "Mode données réduites", color: Theme.warn) }
+                            if p.isConstrained { Pill(text: "Données réduites", color: Theme.warn) }
                         }
                     }
                 }
@@ -167,50 +168,62 @@ struct NetworkInfoView: View {
     private var speedCard: some View {
         Card {
             HStack {
-                Text("Test de débit").font(.headline)
+                SectionTitle(text: "Test de débit", symbol: "speedometer", color: Theme.green)
                 Spacer()
                 Button {
                     Task { await model.runTest() }
                 } label: {
                     if model.testing {
-                        HStack(spacing: 6) { ProgressView(); Text(model.testPhase) }
+                        HStack(spacing: 6) { ProgressView().tint(.white); Text(model.testPhase) }
                     } else {
-                        Text("Lancer")
+                        Label("Lancer", systemImage: "play.fill")
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.accent)
-                .foregroundStyle(Theme.bg)
+                .buttonStyle(GradientButtonStyle(colors: Feature.network.colors))
                 .disabled(model.testing)
             }
             HStack(spacing: 10) {
-                metric("Latence", model.pingAvg.map { String(format: "%.0f", $0) }, "ms")
-                metric("Gigue", model.jitter.map { String(format: "%.0f", $0) }, "ms")
-                metric("Réception", model.download.map { String(format: "%.0f", $0) }, "Mb/s")
-                metric("Envoi", model.upload.map { String(format: "%.0f", $0) }, "Mb/s")
+                metric("Réception", model.download.map { String(format: "%.0f", $0) }, "Mb/s",
+                       "arrow.down.circle.fill", [Theme.green, Theme.mint])
+                metric("Envoi", model.upload.map { String(format: "%.0f", $0) }, "Mb/s",
+                       "arrow.up.circle.fill", [Theme.violet, Theme.pink])
+            }
+            HStack(spacing: 10) {
+                metric("Latence", model.pingAvg.map { String(format: "%.0f", $0) }, "ms",
+                       "timer", [Theme.orange, Theme.yellow])
+                metric("Gigue", model.jitter.map { String(format: "%.0f", $0) }, "ms",
+                       "waveform.path", [Theme.blue, Theme.cyan])
             }
             if model.pings.count > 1 {
-                Sparkline(values: model.pings, color: Theme.blue).frame(height: 36)
+                Sparkline(values: model.pings, color: Theme.orange).frame(height: 40)
             }
             Text("Mesure vers Cloudflare (1.1.1.1 et speed.cloudflare.com). Consomme environ 35 Mo.")
                 .font(.caption2).foregroundStyle(Theme.dim)
         }
     }
 
-    private func metric(_ label: String, _ value: String?, _ unit: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value ?? "–").font(.system(.title3, design: .rounded).weight(.bold)).monospacedDigit()
-            Text(unit).font(.caption2).foregroundStyle(Theme.dim)
-            Text(label).font(.caption2).foregroundStyle(Theme.dim)
+    private func metric(_ label: String, _ value: String?, _ unit: String, _ symbol: String, _ colors: [Color]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(label, systemImage: symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(colors[0])
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value ?? "–")
+                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                    .contentTransition(.numericText())
+                Text(unit).font(.caption.weight(.semibold)).foregroundStyle(Theme.dim)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(Theme.cardHi, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(colors[0].opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var publicCard: some View {
         Card {
-            Text("Internet").font(.headline)
+            SectionTitle(text: "Internet", symbol: "globe", color: Theme.blue)
             if let info = model.publicInfo {
                 InfoRow(label: "IP publique", value: info.ip ?? "—", mono: true)
                 if let isp = info.connection?.isp ?? info.connection?.org { InfoRow(label: "Opérateur", value: isp) }
@@ -218,7 +231,13 @@ struct NetworkInfoView: View {
                 let place = [info.city, info.country].compactMap { $0 }.joined(separator: ", ")
                 if !place.isEmpty { InfoRow(label: "Localisation de l'IP", value: place) }
             } else if model.publicError {
-                Text("Impossible de joindre ipwho.is.").font(.callout).foregroundStyle(Theme.warn)
+                HStack {
+                    Label("Impossible de joindre ipwho.is.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout).foregroundStyle(Theme.warn)
+                    Spacer()
+                    Button("Réessayer") { Task { await model.loadPublicIP() } }
+                        .font(.callout.weight(.semibold))
+                }
             } else {
                 ProgressView()
             }
@@ -235,7 +254,7 @@ struct NetworkInfoView: View {
 
     private var localCard: some View {
         Card {
-            Text("Réseau local").font(.headline)
+            SectionTitle(text: "Réseau local", symbol: "house.fill", color: Theme.indigo)
             if let w = model.wifi {
                 InfoRow(label: "IP Wi‑Fi", value: w.ipString, mono: true)
                 InfoRow(label: "Masque", value: "\(w.maskString) (/\(w.prefix))", mono: true)

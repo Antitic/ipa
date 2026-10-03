@@ -85,7 +85,7 @@ struct LANHost: Identifiable {
             return .camera
         }
         if isGateway || has(["freebox server", "livebox", "bbox", "sfr box", "router", "routeur", "gateway",
-                             "openwrt", "fritz!box", "fritzbox", "netgear", "asuswrt", "tp-link archer", "orbi", "deco"]) {
+                             "openwrt", "fritz!box", "fritzbox", "netgear", "asuswrt", "tp-link archer", "orbi", " deco "]) {
             return .router
         }
         if hasPort([631, 9100]) || hasService(["_ipp._tcp", "_ipps._tcp", "_printer._tcp", "_pdl-datastream._tcp"])
@@ -106,11 +106,11 @@ struct LANHost: Identifiable {
             return .phone
         }
         if hasPort([22, 445, 548, 3389, 5900]) || hasService(["_smb._tcp", "_afpovertcp._tcp", "_ssh._tcp", "_workstation._tcp", "_device-info._tcp"])
-            || has(["macbook", "imac", "mac-mini", "desktop-", "laptop", "thinkpad", "-pc", "ubuntu", "debian", "arch"]) {
+            || has(["macbook", "imac", "mac-mini", "desktop-", "laptop", "thinkpad", "-pc", "ubuntu", "debian", "archlinux"]) {
             return .computer
         }
         if hasPort([1883, 6668]) || hasService(["_hap._tcp", "_homekit._tcp", "_matter._tcp", "_meshcop._udp"])
-            || has(["esp", "tasmota", "shelly", "hue", "tuya", "govee", "nest", "netatmo", "tado", "meross", "sonoff", "yeelight"]) {
+            || has([" esp", "esp32", "esp8266", "tasmota", "shelly", "philips hue", "hue bridge", "tuya", "govee", "google nest", "nest-", "netatmo", "tado", "meross", "sonoff", "yeelight"]) {
             return .iot
         }
         return .unknown
