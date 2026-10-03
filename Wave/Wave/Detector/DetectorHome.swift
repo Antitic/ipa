@@ -101,14 +101,15 @@ struct DetectorHome: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                ZStack {
-                    Theme.card
-                    LinearGradient(colors: [feature.colors[0].opacity(0.12), .clear],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-                },
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-            )
+            .background {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Theme.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(LinearGradient(colors: [feature.colors[0].opacity(0.12), .clear],
+                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+                    )
+            }
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 0.5))
         }
         .buttonStyle(.plain)

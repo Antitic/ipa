@@ -29,8 +29,8 @@ jobs:
 
       - name: Compiler (sans signature)
         run: |
-          set -o pipefail
-          xcodebuild \
+          # Échoue réellement si la compilation échoue (auparavant une IPA vide était publiée).
+          if ! xcodebuild \
             -project Wave.xcodeproj \
             -scheme Wave \
             -configuration Release \
@@ -40,8 +40,12 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build | tee build.log | grep -E "error:|\*\* BUILD" || true
-          test -d build/Build/Products/Release-iphoneos/Wave.app
+            build > build.log 2>&1; then
+            grep -E "error:" build.log | head -50
+            exit 1
+          fi
+          grep -E "\*\* BUILD" build.log
+          test -f build/Build/Products/Release-iphoneos/Wave.app/Wave
 
       - name: Afficher les erreurs
         if: failure()
