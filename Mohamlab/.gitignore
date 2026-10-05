@@ -1,0 +1,7 @@
+MohamLab.xcodeproj/
+MohamLab/Info.plist
+build/
+build-sim/
+Payload/
+*.ipa
+build.log

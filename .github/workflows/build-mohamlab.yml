@@ -1,0 +1,127 @@
+name: Build Mohamlab IPA
+
+on:
+  push:
+    branches: ["**", "!mohamlab-log", "!mohamlab-captures"]
+    paths:
+      - "Mohamlab/**"
+      - ".github/workflows/build-mohamlab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: Mohamlab
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode le plus récent
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+      - name: Compiler (sans signature)
+        run: |
+          set -o pipefail
+          if ! xcodebuild \
+            -project MohamLab.xcodeproj -scheme MohamLab -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1; then
+            grep -E "error:" build.log | head -80
+            exit 1
+          fi
+          grep -E "\*\* BUILD" build.log
+          test -f build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab
+      - name: Publier le journal de compilation (branche mohamlab-log)
+        if: always()
+        run: |
+          { echo "run: ${{ github.run_id }}  commit: ${{ github.sha }}  statut: ${{ job.status }}"; echo;
+            grep -E "error:|warning: .*(deprecated|will never)" build.log | sort -u | head -150 || true;
+            echo; echo "---- fin du log ----"; tail -40 build.log || true; } > /tmp/compile.txt
+          cd "$RUNNER_TEMP" && rm -rf logrepo && mkdir logrepo && cd logrepo
+          git init -q && git checkout -q -b mohamlab-log
+          cp /tmp/compile.txt compile.txt
+          git -c user.name=ci -c user.email=ci@local add compile.txt
+          git -c user.name=ci -c user.email=ci@local commit -qm "log ${{ github.run_id }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" mohamlab-log
+      - name: Créer l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/MohamLab.app Payload/
+          zip -qry Mohamlab.ipa Payload
+          ls -lh Mohamlab.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mohamlab-ipa
+          path: Mohamlab/Mohamlab.ipa
+      - name: Déterminer la version
+        id: version
+        run: echo "tag=mohamlab-v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Mohamlab ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: Mohamlab/Mohamlab.ipa
+          make_latest: false
+          body: |
+            IPA non signée de Mohamlab — la console skeuomorphique du Homelab (ressources, services, journal simplifié).
+            Installez-la avec SideStore, AltStore ou Sideloadly. Tailscale doit être actif sur l'iPhone.
+
+  captures:
+    needs: build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode le plus récent
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Compiler pour le simulateur
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project MohamLab.xcodeproj -scheme MohamLab -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build > sim.log 2>&1 || { grep error: sim.log | head -40; exit 1; }
+      - name: Photographier chaque écran (mode démo)
+        run: |
+          TYPE=$(xcrun simctl list devicetypes | grep -oE 'iPhone 1[5-7] Pro \(' | tail -1 | sed 's/ ($//')
+          UDID=$(xcrun simctl create captures "${TYPE:-iPhone 16 Pro}")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl ui "$UDID" appearance dark || true
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 || true
+          xcrun simctl install "$UDID" build-sim/Build/Products/Debug-iphonesimulator/MohamLab.app
+          mkdir -p captures
+          shot () {
+            name=$1; shift
+            xcrun simctl terminate "$UDID" com.antitic.mohamlab || true
+            xcrun simctl launch "$UDID" com.antitic.mohamlab -forceDemo YES "$@"
+            sleep 7
+            xcrun simctl io "$UDID" screenshot "captures/$name.png"
+          }
+          shot 01-tableau
+          shot 02-ressources -dashScroll 2
+          shot 03-reseau -dashScroll 3
+          shot 04-oscilloscope -dashScroll 4
+          shot 05-coeurs -dashScroll 5
+          shot 06-processus -dashScroll 6
+          shot 07-plaque -dashScroll 7
+          shot 08-services -startTab 1
+          shot 09-fiche -startTab 1 -openService vpn-fastest-exit
+          shot 10-journal -startTab 2
+          shot 11-reglages -startTab 3
+      - name: Publier les captures (branche mohamlab-captures)
+        run: |
+          cp -R captures "$RUNNER_TEMP/caps" && cd "$RUNNER_TEMP/caps"
+          git init -q && git checkout -q -b mohamlab-captures
+          git -c user.name=ci -c user.email=ci@local add .
+          git -c user.name=ci -c user.email=ci@local commit -qm "captures ${{ github.run_id }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" mohamlab-captures
