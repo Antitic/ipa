@@ -154,11 +154,11 @@ struct RotaryKnob: View {
     var options: [String]
     @Binding var selection: Int
     var knobSize: CGFloat = 58
-    var arc: Double = 140
+    var arc: Double = 120
     var style: PlateStyle = .aluminum
 
-    private var labelRadius: CGFloat { knobSize / 2 + 16 }
-    private var side: CGFloat { knobSize + 70 }
+    private var labelRadius: CGFloat { knobSize / 2 + 24 }
+    private var side: CGFloat { knobSize + 92 }
 
     private var angles: [Double] {
         guard options.count > 1 else { return [0] }

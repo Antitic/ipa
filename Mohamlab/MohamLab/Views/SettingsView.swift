@@ -13,7 +13,7 @@ struct SettingsView: View {
         @Bindable var store = store
         ScrollView {
             VStack(spacing: 18) {
-                Plate(title: "Liaison avec le serveur") {
+                Plate(title: "Liaison serveur") {
                     slot(label: "Adresse de l'agent") {
                         TextField("http://100.100.226.91:8787", text: $store.baseURL)
                             .keyboardType(.URL)

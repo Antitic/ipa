@@ -55,7 +55,7 @@ struct ServiceDetailView: View {
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("FICHE DE SERVICE  N° \(ficheNumber(s))")
+                    Text("FICHE DE SERVICE  N° " + String(ficheNumber(s)))
                         .font(.custom("AmericanTypewriter", size: 10))
                         .foregroundStyle(Palette.ribbonBlack.opacity(0.6))
                     Text(s.title)
@@ -78,7 +78,7 @@ struct ServiceDetailView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 field("Unité", s.id)
-                field("État", "\(s.activeState) (\(s.subState))", red: s.isFailed)
+                field("État", "\(s.stateLabel.lowercased()) · \(s.subState)", red: s.isFailed)
                 field("Démarrage auto", s.enabled ? "oui" : "non")
                 field("En marche depuis", s.uptime.map { Fmt.duration($0) } ?? "—")
                 field("Mémoire", memoryText(s))
@@ -103,7 +103,8 @@ struct ServiceDetailView: View {
 
             logSection
         }
-        .padding(.horizontal, 18)
+        .padding(.leading, 30)
+        .padding(.trailing, 18)
         .padding(.top, 26)
         .padding(.bottom, 22)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -310,7 +310,7 @@ private struct ScopePanel: View {
 
     var body: some View {
         let h = store.history
-        Plate(title: "Oscilloscope · une heure") {
+        Plate(title: "Oscilloscope · 1 h") {
             Oscilloscope(points: series(h), channel: "CH\(channel + 1) · \(channels[channel].uppercased())",
                          valueText: current(h), span: "−60 MIN")
             HStack(alignment: .center) {
@@ -462,7 +462,7 @@ private struct SystemPanel: View {
     var body: some View {
         let o = store.overview
         Plate(title: "Plaque signalétique", spacing: 10) {
-            row("Système", o?.os ?? "—")
+            row("Système", o?.shortOS ?? "—")
             row("Noyau", o?.kernel ?? "—")
             row("Tailscale", o?.tailscaleIP ?? "—")
             ForEach(o?.lanIPs ?? []) { a in

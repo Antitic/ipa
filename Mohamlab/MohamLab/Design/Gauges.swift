@@ -117,7 +117,7 @@ struct GaugeFace: View, Equatable {
                              at: p, anchor: .center)
                 }
                 ctx.draw(Text(title.uppercased())
-                            .font(.system(size: radius * 0.17, weight: .heavy).width(.condensed))
+                            .font(.system(size: radius * 0.15, weight: .heavy).width(.condensed))
                             .tracking(radius * 0.02)
                             .foregroundStyle(ink),
                          at: CGPoint(x: c.x, y: c.y - radius * 0.3), anchor: .center)
