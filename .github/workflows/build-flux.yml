@@ -1,0 +1,67 @@
+name: Build Flux IPA
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "Flux/**"
+      - ".github/workflows/build-flux.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: Flux
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+      - name: Compiler (sans signature)
+        run: |
+          if ! xcodebuild \
+            -project Flux.xcodeproj -scheme Flux -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1; then
+            grep -E "error:" build.log | head -50
+            exit 1
+          fi
+          grep -E "\*\* BUILD" build.log
+          test -f build/Build/Products/Release-iphoneos/Flux.app/Flux
+      - name: Afficher les erreurs
+        if: failure()
+        run: grep -E "error:" build.log | head -50 || true
+      - name: Créer l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Flux.app Payload/
+          zip -qry Flux.ipa Payload
+          ls -lh Flux.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Flux-ipa
+          path: Flux/Flux.ipa
+      - name: Déterminer la version
+        id: version
+        run: echo "tag=flux-v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
+      - name: Publier la release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Flux ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: Flux/Flux.ipa
+          overwrite_files: true
+          make_latest: false
+          body: |
+            IPA non signée de Flux — YouTube sans Shorts, sans pubs, sans trackers Google (via Piped).
+            Installez-la avec SideStore, AltStore ou Sideloadly.

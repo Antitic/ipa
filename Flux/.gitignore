@@ -1,0 +1,7 @@
+# Généré par XcodeGen
+Flux.xcodeproj/
+Flux/Info.plist
+build/
+Payload/
+*.ipa
+build.log
