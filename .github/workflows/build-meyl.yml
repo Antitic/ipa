@@ -1,0 +1,123 @@
+name: Build Meyl IPA
+
+on:
+  push:
+    branches: ["**", "!meyl-log", "!meyl-captures"]
+    paths:
+      - "Meyl/**"
+      - ".github/workflows/build-meyl.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: Meyl
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode le plus récent
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+      - name: Générer le projet Xcode
+        run: xcodegen generate
+      - name: Compiler (sans signature)
+        run: |
+          set -o pipefail
+          if ! xcodebuild \
+            -project Meyl.xcodeproj -scheme Meyl -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1; then
+            grep -E "error:" build.log | head -80
+            exit 1
+          fi
+          grep -E "\*\* BUILD" build.log
+          test -f build/Build/Products/Release-iphoneos/Meyl.app/Meyl
+      - name: Publier le journal de compilation (branche meyl-log)
+        if: always()
+        run: |
+          { echo "run: ${{ github.run_id }}  commit: ${{ github.sha }}  statut: ${{ job.status }}"; echo;
+            grep -E "error:|warning: .*(deprecated|will never)" build.log | sort -u | head -150 || true;
+            echo; echo "---- fin du log ----"; tail -40 build.log || true; } > /tmp/compile.txt
+          cd "$RUNNER_TEMP" && rm -rf logrepo && mkdir logrepo && cd logrepo
+          git init -q && git checkout -q -b meyl-log
+          cp /tmp/compile.txt compile.txt
+          git -c user.name=ci -c user.email=ci@local add compile.txt
+          git -c user.name=ci -c user.email=ci@local commit -qm "log ${{ github.run_id }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" meyl-log
+      - name: Créer l'IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Meyl.app Payload/
+          zip -qry Meyl.ipa Payload
+          ls -lh Meyl.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Meyl-ipa
+          path: Meyl/Meyl.ipa
+      - name: Déterminer la version
+        id: version
+        run: echo "tag=meyl-v$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)" >> "$GITHUB_OUTPUT"
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Meyl ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          files: Meyl/Meyl.ipa
+          make_latest: false
+          body: |
+            IPA non signée de Meyl — le courrier de mail.dipherant.xyz dans une écritoire skeuomorphique.
+            Installe-la avec LiveContainer, SideStore, AltStore ou Sideloadly.
+
+  captures:
+    needs: build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode le plus récent
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Compiler pour le simulateur
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project Meyl.xcodeproj -scheme Meyl -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build-sim CODE_SIGNING_ALLOWED=NO build > sim.log 2>&1 || { grep error: sim.log | head -40; exit 1; }
+      - name: Photographier chaque écran (mode démo)
+        run: |
+          TYPE=$(xcrun simctl list devicetypes | grep -oE 'iPhone 1[5-7] Pro \(' | tail -1 | sed 's/ ($//')
+          UDID=$(xcrun simctl create captures "${TYPE:-iPhone 16 Pro}")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl ui "$UDID" appearance dark || true
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 || true
+          xcrun simctl install "$UDID" build-sim/Build/Products/Debug-iphonesimulator/Meyl.app
+          mkdir -p captures
+          shot () {
+            name=$1; shift
+            xcrun simctl terminate "$UDID" com.antitic.meyl || true
+            xcrun simctl launch "$UDID" com.antitic.meyl -forceDemo YES "$@"
+            sleep 7
+            xcrun simctl io "$UDID" screenshot "captures/$name.png"
+          }
+          xcrun simctl launch "$UDID" com.antitic.meyl
+          sleep 6
+          xcrun simctl io "$UDID" screenshot captures/01-connexion.png
+          shot 02-casiers
+          shot 03-reception -openBox INBOX
+          shot 04-lettre -openBox INBOX -openMessage 218
+          shot 05-redaction -openCompose YES
+      - name: Publier les captures (branche meyl-captures)
+        run: |
+          cp -R captures "$RUNNER_TEMP/caps" && cd "$RUNNER_TEMP/caps"
+          git init -q && git checkout -q -b meyl-captures
+          git -c user.name=ci -c user.email=ci@local add .
+          git -c user.name=ci -c user.email=ci@local commit -qm "captures ${{ github.run_id }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" meyl-captures

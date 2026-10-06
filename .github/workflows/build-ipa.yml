@@ -9,6 +9,8 @@ on:
       - ".github/workflows/build-wave.yml"
       - "Flux/**"
       - ".github/workflows/build-flux.yml"
+      - "Meyl/**"
+      - ".github/workflows/build-meyl.yml"
   pull_request:
   workflow_dispatch:
 

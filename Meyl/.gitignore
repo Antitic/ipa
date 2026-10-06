@@ -1,0 +1,7 @@
+Meyl.xcodeproj/
+Meyl/Info.plist
+build/
+build-sim/
+Payload/
+*.ipa
+build.log
