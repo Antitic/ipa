@@ -196,7 +196,7 @@ extension View {
 
     /// Texte creusé dans le laiton : sombre avec un liseré clair dessous.
     func engraved() -> some View {
-        self.foregroundStyle(Ink.brassDeep.opacity(0.95))
+        self.foregroundStyle(Color(red: 0.24, green: 0.15, blue: 0.04))
             .shadow(color: Ink.brassHi.opacity(0.9), radius: 0, x: 0, y: 1)
             .shadow(color: .black.opacity(0.35), radius: 0, x: 0, y: -0.5)
     }

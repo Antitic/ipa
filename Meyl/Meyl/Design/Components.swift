@@ -294,12 +294,14 @@ struct TypedField: View {
             Text(label)
                 .font(Typo.serif(15, bold: true))
                 .foregroundStyle(Ink.inkSoft)
-                .frame(width: 74, alignment: .leading)
+                .frame(width: 104, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Group {
                 if secure {
-                    SecureField(placeholder, text: $text)
+                    SecureField("", text: $text, prompt: Text(placeholder).foregroundStyle(Ink.inkSoft.opacity(0.45)))
                 } else {
-                    TextField(placeholder, text: $text)
+                    TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Ink.inkSoft.opacity(0.45)))
                         .keyboardType(keyboard)
                 }
             }

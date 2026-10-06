@@ -164,7 +164,7 @@ struct MailboxDoor: View {
 
             Text(countText)
                 .font(Typo.typewriter(11))
-                .foregroundStyle(Ink.brassDeep)
+                .foregroundStyle(Color(red: 0.30, green: 0.20, blue: 0.06))
                 .padding(.bottom, 18)
         }
         .frame(maxWidth: .infinity)

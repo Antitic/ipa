@@ -104,7 +104,7 @@ struct MessageListView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(Ink.inkSoft)
-            TextField("Chercher dans tout le courrier", text: $query)
+            TextField("", text: $query, prompt: Text("Chercher dans tout le courrier").foregroundStyle(Ink.inkSoft.opacity(0.5)))
                 .font(Typo.typewriter(15))
                 .foregroundStyle(Ink.ink)
                 .tint(Ink.redInk)
