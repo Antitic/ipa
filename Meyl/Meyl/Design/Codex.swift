@@ -61,7 +61,7 @@ enum CX {
     }
 
     /// Détails bitmap (dates, compteurs, étiquettes) — toujours en majuscules.
-    static func pixel(_ size: CGFloat = 9) -> Font { .custom("Silkscreen-Regular", size: size) }
+    static func pixel(_ size: CGFloat = 9) -> Font { .custom("Silkscreen-Regular", size: size + 2) }
 }
 
 extension View {

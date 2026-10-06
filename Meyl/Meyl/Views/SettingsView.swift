@@ -23,7 +23,7 @@ struct SettingsView: View {
                 .padding(.top, 22)
 
                 section("Thème")
-                HStack(spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
                     ForEach(AppTheme.allCases) { t in
                         Button {
                             UISelectionFeedbackGenerator().selectionChanged()
