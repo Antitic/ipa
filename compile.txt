@@ -1,0 +1,44 @@
+run: 37431115938  commit: da552a07382b60909d1055de6ab01b1aab0e0834  statut: success
+
+
+---- fin du log ----
+
+Ld /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab normal (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0 -isysroot /Applications/Xcode_26.3.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -Os -L/Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/EagerLinkingTBDs/Release-iphoneos -L/Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos -F/Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/EagerLinkingTBDs/Release-iphoneos -F/Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos -filelist /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab_lto.o -Xlinker -dependency_info -Xlinker /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphoneos -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab.swiftmodule @/Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab-linker-args.resp -o /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab
+
+ExtractAppIntentsMetadata (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.3.7003.10.kUrdhg/Metal.xctoolchain --module-name MohamLab --sdk-root /Applications/Xcode_26.3.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk --xcode-version 17C529 --platform-family iOS --deployment-target 17.0 --bundle-identifier com.antitic.mohamlab --output /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app --target-triple arm64-apple-ios17.0 --binary-file /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab --dependency-file /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab_dependency_info.dat --stringsdata-file /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab.SwiftFileList --metadata-file-list /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/MohamLab.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/MohamLab.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/Objects-normal/arm64/MohamLab.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 07:41:23.006 appintentsmetadataprocessor[12813:41945] Starting appintentsmetadataprocessor export
+2026-10-06 07:41:23.010 appintentsmetadataprocessor[12813:41945] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab --scan-folder /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/Frameworks --scan-folder /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/PlugIns --scan-folder /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/SystemExtensions --scan-folder /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/Extensions --platform iphoneos --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.3.7003.10.kUrdhg/Metal.xctoolchain --toolchain /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+Ignoring --strip-bitcode because --sign was not passed
+
+GenerateDSYMFile /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app.dSYM /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/MohamLab -o /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app.dSYM
+
+AppIntentsSSUTraining (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/Info.plist --temp-dir-path /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/ssu --bundle-id com.antitic.mohamlab --product-path /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app --extracted-metadata-path /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app/Metadata.appintents --metadata-file-list /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Intermediates.noindex/MohamLab.build/Release-iphoneos/MohamLab.build/MohamLab.DependencyMetadataFileList --archive-ssu-assets
+2026-10-06 07:41:23.039 appintentsnltrainingprocessor[12815:41953] Parsing options for appintentsnltrainingprocessor
+2026-10-06 07:41:23.039 appintentsnltrainingprocessor[12815:41953] No AppShortcuts found - Skipping.
+
+RegisterExecutionPolicyException /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    builtin-RegisterExecutionPolicyException /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app
+
+Validate /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    builtin-validationUtility /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app (in target 'MohamLab' from project 'MohamLab')
+    cd /Users/runner/work/ipa/ipa/Mohamlab
+    /usr/bin/touch -c /Users/runner/work/ipa/ipa/Mohamlab/build/Build/Products/Release-iphoneos/MohamLab.app
+
+** BUILD SUCCEEDED **
+
