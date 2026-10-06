@@ -17,7 +17,7 @@ enum APIError: LocalizedError {
         case .unauthorized:
             return "Jeton refusé par le serveur."
         case .unreachable:
-            return "Serveur injoignable. Tailscale est-il actif sur l'iPhone ?"
+            return "Serveur injoignable. Vérifie la connexion internet et que le tunnel Cloudflare tourne."
         case .http(let code, let message):
             return "Le serveur a répondu \(code) : \(message)"
         case .decoding:

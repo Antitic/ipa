@@ -15,7 +15,7 @@ struct SettingsView: View {
             VStack(spacing: 18) {
                 Plate(title: "Liaison serveur") {
                     slot(label: "Adresse de l'agent") {
-                        TextField("http://100.100.226.91:8787", text: $store.baseURL)
+                        TextField("https://mlab.dipherant.xyz", text: $store.baseURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .focused($focused, equals: .url)
@@ -104,8 +104,8 @@ struct SettingsView: View {
 
                 Plate(title: "Mode d'emploi", style: .brass) {
                     VStack(alignment: .leading, spacing: 8) {
-                        note("1", "Active Tailscale sur l'iPhone : l'agent n'écoute que le réseau privé.")
-                        note("2", "Adresse : http://100.100.226.91:8787 (ou l'IP locale chez toi).")
+                        note("1", "L'agent passe par le tunnel Cloudflare : ça marche partout, en 4G comme en Wi-Fi.")
+                        note("2", "Adresse : https://mlab.dipherant.xyz (ou http://192.168.1.120:8787 chez toi).")
                         note("3", "Jeton : sudo cat /etc/mlab-agent/token sur le Homelab.")
                         note("4", "Tire vers le bas sur n'importe quel écran pour forcer une relève.")
                     }

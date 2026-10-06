@@ -23,8 +23,9 @@ mohamlab/
 
 ## 1. L'agent sur le serveur (déjà installé)
 
-`mlab-agent` tourne sur le Homelab comme service systemd, port **8787**. Il n'accepte que Tailscale
-(100.64.0.0/10), le réseau local et localhost, **et** exige un jeton.
+`mlab-agent` tourne sur le Homelab comme service systemd, port **8787**, publié par le tunnel Cloudflare
+sur **https://mlab.dipherant.xyz** (entrée ajoutée dans `/etc/cloudflared/config.yml`). Chaque requête
+exige le jeton ; après 10 jetons faux en 10 minutes, l'adresse est bloquée.
 
 ```bash
 sudo cat /etc/mlab-agent/token          # le jeton à coller dans l'app
@@ -62,8 +63,8 @@ du simulateur pour chaque écran, en mode démo).
 
 ## 3. Brancher l'app
 
-1. Tailscale actif sur l'iPhone.
-2. Onglet **Réglages** → adresse `http://100.100.226.91:8787`, colle le jeton, **Tester** puis **Appliquer**.
+1. Onglet **Réglages** → l'adresse `https://mlab.dipherant.xyz` est déjà remplie.
+2. Colle le jeton, **Tester** puis **Appliquer**.
 3. Tant qu'aucun jeton n'est saisi, l'app tourne en **mode démo** (données fictives qui bougent).
 
 ## Les écrans

@@ -172,7 +172,7 @@ _ALERTS_CACHE = {"t": 0, "v": {"errors": 0, "warnings": 0}}
 def alert_counts():
     if time.time() - _ALERTS_CACHE["t"] < 60:
         return _ALERTS_CACHE["v"]
-    c = logs(24, "warning")["counts"]
+    c = logs(24, "warning", max_age=300)["counts"]
     errors, warnings = c["error"], c["warning"]
     _ALERTS_CACHE.update(t=time.time(), v={"errors": errors, "warnings": warnings})
     return _ALERTS_CACHE["v"]
@@ -614,7 +614,40 @@ def simplify(e):
             "level": level, "message": text, "raw": msg[:600]}
 
 
-def logs(hours=12, level="all", unit=None):
+_LOG_CACHE = {}
+_LOG_LOCK = threading.Lock()
+
+
+def logs(hours=12, level="all", unit=None, max_age=90):
+    """Journal simplifié, mis en cache : filtrer 2,5 Go de journal prend ~10 s à froid."""
+    key = (hours, level, unit)
+    hit = _LOG_CACHE.get(key)
+    if hit and time.time() - hit[0] < max_age:
+        return hit[1]
+    with _LOG_LOCK:
+        hit = _LOG_CACHE.get(key)
+        if hit and time.time() - hit[0] < max_age:
+            return hit[1]
+        value = _logs_uncached(hours, level, unit)
+        _LOG_CACHE[key] = (time.time(), value)
+        if len(_LOG_CACHE) > 60:
+            oldest = min(_LOG_CACHE, key=lambda k: _LOG_CACHE[k][0])
+            _LOG_CACHE.pop(oldest, None)
+        return value
+
+
+def warm_logs():
+    """Garde au chaud les vues les plus demandées par l'app."""
+    while True:
+        for h, lvl in ((24, "all"), (24, "warning"), (24, "error"), (6, "all")):
+            try:
+                logs(h, lvl, max_age=45)
+            except Exception as e:
+                print("warm:", e, flush=True)
+        time.sleep(50)
+
+
+def _logs_uncached(hours=12, level="all", unit=None):
     if not DESCRIPTIONS:
         services()
     unit_name = (unit + ".service") if unit and "." not in unit else unit
@@ -657,6 +690,11 @@ def logs(hours=12, level="all", unit=None):
 
 # ───────────────────────────── HTTP ─────────────────────────────
 
+# Anti force brute : derrière Cloudflare, l'adresse réelle est dans CF-Connecting-IP.
+FAILS = {}
+FAIL_LIMIT, FAIL_WINDOW = 10, 600
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "mlab-agent/" + VERSION
 
@@ -670,9 +708,22 @@ class Handler(BaseHTTPRequestHandler):
             return False
         if not any(ip in n for n in ALLOWED_NETS):
             return False
+        who = self.headers.get("CF-Connecting-IP") or str(ip)
+        now = time.time()
+        recent = [t for t in FAILS.get(who, []) if now - t < FAIL_WINDOW]
+        if len(recent) >= FAIL_LIMIT:
+            FAILS[who] = recent
+            return False
         auth = self.headers.get("Authorization", "")
         given = auth.removeprefix("Bearer ").strip()
-        return hmac.compare_digest(given.encode(), TOKEN.encode())
+        if hmac.compare_digest(given.encode(), TOKEN.encode()):
+            FAILS.pop(who, None)
+            return True
+        recent.append(now)
+        FAILS[who] = recent
+        if len(FAILS) > 5000:
+            FAILS.clear()
+        return False
 
     def _send(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode()
@@ -731,6 +782,7 @@ def main():
     SAMPLER = Sampler()
     SAMPLER.tick()
     threading.Thread(target=SAMPLER.run, daemon=True).start()
+    threading.Thread(target=warm_logs, daemon=True).start()
     srv = ThreadingHTTPServer((BIND, PORT), Handler)
     srv.daemon_threads = True
     print(f"mlab-agent {VERSION} sur {BIND}:{PORT}", flush=True)

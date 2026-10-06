@@ -64,14 +64,16 @@ final class Store {
     static let logHourLabels = ["1 h", "6 h", "24 h", "7 j"]
     static let logLevels = ["all", "warning", "error"]
     static let logLevelLabels = ["Tout", "Alertes", "Erreurs"]
-    static let defaultURL = "http://100.100.226.91:8787"
+    static let defaultURL = "https://mlab.dipherant.xyz"
+    static let oldDefaultURL = "http://100.100.226.91:8787"
 
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     private let demo = DemoGenerator()
 
     init() {
         let d = UserDefaults.standard
-        baseURL = d.string(forKey: "baseURL") ?? Store.defaultURL
+        let saved = d.string(forKey: "baseURL")
+        baseURL = (saved == nil || saved == Store.oldDefaultURL) ? Store.defaultURL : saved!
         token = Keychain.get("token")
         demoMode = d.object(forKey: "demoMode") as? Bool ?? false
         intervalIndex = d.object(forKey: "intervalIndex") as? Int ?? 0
