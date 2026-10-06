@@ -1,0 +1,44 @@
+run: 37461079778  commit: d450d105883520a8f545068edfe81b06cee39c55  statut: success
+
+
+---- fin du log ----
+
+ProcessInfoPlistFile /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Info.plist /Users/runner/work/ipa/ipa/Meyl/Meyl/Info.plist (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    builtin-infoPlistUtility /Users/runner/work/ipa/ipa/Meyl/Meyl/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/PkgInfo -expandbuildsettings -format binary -platform iphoneos -additionalcontentfile /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/assetcatalog_generated_info.plist -requiredArchitecture arm64 -o /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Info.plist
+
+ExtractAppIntentsMetadata (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.3.7003.10.IlGBNq/Metal.xctoolchain --module-name Meyl --sdk-root /Applications/Xcode_26.3.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk --xcode-version 17C529 --platform-family iOS --deployment-target 17.0 --bundle-identifier com.antitic.meyl --output /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app --target-triple arm64-apple-ios17.0 --binary-file /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Meyl --dependency-file /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Objects-normal/arm64/Meyl_dependency_info.dat --stringsdata-file /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Objects-normal/arm64/Meyl.SwiftFileList --metadata-file-list /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Meyl.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Meyl.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Objects-normal/arm64/Meyl.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-06 12:09:09.632 appintentsmetadataprocessor[4755:17041] Starting appintentsmetadataprocessor export
+2026-10-06 12:09:09.641 appintentsmetadataprocessor[4755:17041] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Meyl --scan-folder /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Frameworks --scan-folder /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/PlugIns --scan-folder /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/SystemExtensions --scan-folder /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Extensions --platform iphoneos --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.3.7003.10.IlGBNq/Metal.xctoolchain --toolchain /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+Ignoring --strip-bitcode because --sign was not passed
+
+GenerateDSYMFile /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app.dSYM /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Meyl (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Meyl -o /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app.dSYM
+
+AppIntentsSSUTraining (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Info.plist --temp-dir-path /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/ssu --bundle-id com.antitic.meyl --product-path /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app --extracted-metadata-path /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app/Metadata.appintents --metadata-file-list /Users/runner/work/ipa/ipa/Meyl/build/Build/Intermediates.noindex/Meyl.build/Release-iphoneos/Meyl.build/Meyl.DependencyMetadataFileList --archive-ssu-assets
+2026-10-06 12:09:09.679 appintentsnltrainingprocessor[4757:17051] Parsing options for appintentsnltrainingprocessor
+2026-10-06 12:09:09.682 appintentsnltrainingprocessor[4757:17051] No AppShortcuts found - Skipping.
+
+RegisterExecutionPolicyException /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    builtin-RegisterExecutionPolicyException /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app
+
+Validate /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    builtin-validationUtility /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app (in target 'Meyl' from project 'Meyl')
+    cd /Users/runner/work/ipa/ipa/Meyl
+    /usr/bin/touch -c /Users/runner/work/ipa/ipa/Meyl/build/Build/Products/Release-iphoneos/Meyl.app
+
+** BUILD SUCCEEDED **
+
