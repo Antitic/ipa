@@ -186,29 +186,3 @@ struct BoutonIPod: View {
         .disabled(!actif)
     }
 }
-
-/// Champ texte façon iPod.
-struct ChampIPod: View {
-    let titre: String
-    @Binding var texte: String
-    var secret = false
-    var clavier: UIKeyboardType = .default
-
-    var body: some View {
-        Group {
-            if secret {
-                SecureField(titre, text: $texte)
-            } else {
-                TextField(titre, text: $texte)
-                    .keyboardType(clavier)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-        }
-        .font(.system(size: 14))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color(white: 0.95)))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(white: 0.75), lineWidth: 0.5))
-    }
-}

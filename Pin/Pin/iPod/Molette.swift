@@ -117,6 +117,7 @@ struct Molette: View {
 
     private func cranFranchi(_ sens: Int) {
         if haptique { tic.selectionChanged() }
+        Son.tic()
         nav.gestionnaire.tour?(sens)
     }
 
@@ -129,6 +130,7 @@ struct Molette: View {
         // Un toucher : quelle zone ?
         let a = angle(pointDepart, rayon: rayon) * 180 / .pi   // 0 = droite, 90 = bas
         if haptique { clic.impactOccurred() }
+        Son.tic()
         switch a {
         case -135 ..< -45:
             if duree > 0.6 { nav.accueil() } else { menu() }
@@ -173,6 +175,7 @@ struct Molette: View {
             nav.gestionnaire.centreRelache?()
         } else {
             if haptique { clic.impactOccurred() }
+            Son.tic()
             nav.gestionnaire.centre?()
         }
     }

@@ -65,7 +65,7 @@ struct EcranLiaisonWhatsApp: View {
                 } else {
                     Text("Ton numéro WhatsApp avec l'indicatif, sans + ni 0 (ex. 33612345678).")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "33612345678", texte: $numero, clavier: .numberPad)
+                    ChampIPod(titre: "33612345678", texte: $numero, type: .numero, libelleRetour: "code", retour: { lier() })
                     BoutonIPod(titre: enCours ? "Demande…" : "Obtenir un code", actif: !enCours) { lier() }
                 }
                 if let erreur { Text(erreur).font(.system(size: 12)).foregroundStyle(.red) }
@@ -106,7 +106,8 @@ struct EcranConversation: View {
     @StateObject private var dictee = Dictee()
     @StateObject private var enregistreur = Enregistreur()
     @StateObject private var lecteurVocal = LecteurVocal()
-    @FocusState private var saisieActive: Bool
+    @EnvironmentObject var clavier: Clavier
+    @State private var idSaisie = UUID()
     @State private var choixPhoto: PhotosPickerItem?
     @State private var choixOuvert = false
 
@@ -183,10 +184,7 @@ struct EcranConversation: View {
             g.centreRelache = { envoyerVocal() }
             g.precedent = { basculerDictee() }
             g.suivant = { choixOuvert = true }
-            g.menu = {
-                if saisieActive { saisieActive = false; return true }
-                return false
-            }
+            g.menu = { false }
         }
     }
 
@@ -200,14 +198,7 @@ struct EcranConversation: View {
             Button { choixOuvert = true } label: {
                 Image(systemName: "photo.circle").font(.system(size: 20)).foregroundStyle(Color(white: 0.4))
             }
-            TextField("Message", text: $etat.texte, axis: .vertical)
-                .font(.system(size: 13))
-                .lineLimit(1...3)
-                .focused($saisieActive)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: 12).fill(.white))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(white: 0.75), lineWidth: 0.5))
+            ZoneSaisie(id: idSaisie, titre: "Message", texte: $etat.texte) { envoyerTexte() }
             if !etat.texte.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button { envoyerTexte() } label: {
                     Image(systemName: "arrow.up.circle.fill").font(.system(size: 22))
@@ -220,6 +211,10 @@ struct EcranConversation: View {
     }
 
     // MARK: - Actions
+
+    private func ouvrirClavier() {
+        clavier.ouvrir(champ: idSaisie, texte: $etat.texte, type: .texte, libelleRetour: "envoyer") { envoyerTexte() }
+    }
 
     private func tourner(_ s: Int) {
         guard !liste.isEmpty else { return }
@@ -246,7 +241,7 @@ struct EcranConversation: View {
         switch m.type {
         case "image": nav.ouvrir(.imageWhatsApp(id: m.id))
         case "vocal": lecteurVocal.basculer(m.id)
-        default: saisieActive = true
+        default: ouvrirClavier()
         }
     }
 

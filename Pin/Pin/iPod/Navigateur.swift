@@ -11,6 +11,8 @@ enum Ecran: Hashable {
     case photo(index: Int)
     case choixDiscussion(assetId: String)
     case claude
+    case discussionClaude(uuid: String, nom: String)
+    case connexionClaude
     case reglages, connexion, telegram
 
     var titre: String {
@@ -27,6 +29,8 @@ enum Ecran: Hashable {
         case .photo: return "Photo"
         case .choixDiscussion: return "Envoyer à"
         case .claude: return "Claude"
+        case .discussionClaude(_, let nom): return nom
+        case .connexionClaude: return "claude.ai"
         case .reglages: return "Réglages"
         case .connexion: return "Compte Pin"
         case .telegram: return "Telegram"

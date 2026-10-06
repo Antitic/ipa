@@ -218,16 +218,16 @@ struct EcranTelegram: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 } else if etape == "telephone" {
                     Text("Ton numéro Telegram, avec l'indicatif.").font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "+33 6 12 34 56 78", texte: $telephone, clavier: .phonePad)
+                    ChampIPod(titre: "+33 6 12 34 56 78", texte: $telephone, type: .telephone, libelleRetour: "envoyer", retour: { valider() })
                     BoutonIPod(titre: enCours ? "Envoi…" : "Recevoir le code", actif: !enCours) { valider() }
                 } else if etape == "code" {
                     Text("Tape le code reçu dans Telegram.").font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "Code", texte: $code, clavier: .numberPad)
+                    ChampIPod(titre: "Code", texte: $code, type: .numero, libelleRetour: "valider", retour: { valider() })
                     BoutonIPod(titre: enCours ? "Vérification…" : "Valider", actif: !enCours && !code.isEmpty) { valider() }
                 } else {
                     Text("Ton compte a un mot de passe (validation en deux étapes).")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "Mot de passe Telegram", texte: $motDePasse, secret: true)
+                    ChampIPod(titre: "Mot de passe Telegram", texte: $motDePasse, secret: true, libelleRetour: "valider", retour: { valider() })
                     BoutonIPod(titre: enCours ? "Vérification…" : "Valider", actif: !enCours && !motDePasse.isEmpty) { valider() }
                 }
                 if let erreur {

@@ -2,26 +2,37 @@ import SwiftUI
 
 /// Le boîtier : écran en haut, molette en bas, comme un iPod classic.
 struct Coque: View {
+    @EnvironmentObject var clavier: Clavier
+
     var body: some View {
         GeometryReader { g in
             let largeur = g.size.width
             let marge: CGFloat = 18
             let hauteurEcran = min(g.size.height * 0.5, (largeur - marge * 2) * 1.05)
+            let cote = max(120, min(largeur * 0.78, g.size.height - hauteurEcran - 60))
             VStack(spacing: 0) {
                 EcranIPod()
                     .frame(height: hauteurEcran)
                     .padding(.horizontal, marge)
                     .padding(.top, max(g.safeAreaInsets.top, 14))
-                Spacer(minLength: 12)
-                Molette()
-                    .frame(width: min(largeur * 0.78, g.size.height - hauteurEcran - 60),
-                           height: min(largeur * 0.78, g.size.height - hauteurEcran - 60))
-                Spacer(minLength: 12)
+                ZStack {
+                    if clavier.actif {
+                        // Le clavier Pin prend la place de la molette.
+                        ClavierIPod()
+                            .padding(.bottom, max(g.safeAreaInsets.bottom, 6))
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        Molette()
+                            .frame(width: cote, height: cote)
+                            .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Boitier())
         }
-        .ignoresSafeArea(.container, edges: .top)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
         .ignoresSafeArea(.keyboard)
     }
 }
@@ -81,6 +92,8 @@ struct EcranIPod: View {
         case .photo(let index): EcranPhoto(indexDepart: index)
         case .choixDiscussion(let assetId): EcranChoixDiscussion(assetId: assetId)
         case .claude: EcranClaude()
+        case .discussionClaude(let uuid, let nom): EcranDiscussionClaude(uuidDepart: uuid, nom: nom)
+        case .connexionClaude: EcranConnexionClaude()
         case .reglages: EcranReglages()
         case .connexion: EcranConnexion()
         case .telegram: EcranTelegram()

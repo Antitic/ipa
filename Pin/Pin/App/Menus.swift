@@ -48,6 +48,7 @@ struct EcranReglages: View {
     @EnvironmentObject var whatsapp: WhatsAppStore
     @EnvironmentObject var lecteur: Lecteur
     @AppStorage("haptique") private var haptique = true
+    @AppStorage("clics") private var clics = true
     @State private var telegramLie: Bool?
     @State private var confirmation: String?
 
@@ -71,6 +72,7 @@ struct EcranReglages: View {
             ElementListe(id: "compte", titre: "Compte Pin", detail: compte.email ?? "Non connecté"),
             ElementListe(id: "whatsapp", titre: "WhatsApp", detail: detailWhatsApp),
             ElementListe(id: "telegram", titre: "Telegram (musique)", detail: detailTelegram),
+            ElementListe(id: "clics", titre: "Clics", detail: clics ? "Oui (coupés en mode silencieux)" : "Non", chevron: false),
             ElementListe(id: "haptique", titre: "Retour haptique", detail: haptique ? "Oui" : "Non", chevron: false),
             ElementListe(id: "cache", titre: "Vider le cache musique", detail: confirmation, chevron: false),
         ]
@@ -80,6 +82,7 @@ struct EcranReglages: View {
             case "whatsapp": if compte.connecte { nav.ouvrir(.liaisonWhatsApp) } else { nav.ouvrir(.connexion) }
             case "telegram": if compte.connecte { nav.ouvrir(.telegram) } else { nav.ouvrir(.connexion) }
             case "haptique": haptique.toggle()
+            case "clics": clics.toggle()
             default:
                 lecteur.viderCache()
                 confirmation = "Cache vidé"
@@ -113,8 +116,8 @@ struct EcranConnexion: View {
                 } else {
                     Text("Connecte-toi avec ton adresse @dipherant.xyz et son mot de passe Mèyl.")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "adresse@dipherant.xyz", texte: $email, clavier: .emailAddress)
-                    ChampIPod(titre: "Mot de passe", texte: $motDePasse, secret: true)
+                    ChampIPod(titre: "adresse@dipherant.xyz", texte: $email, type: .email)
+                    ChampIPod(titre: "Mot de passe", texte: $motDePasse, secret: true, type: .email, libelleRetour: "connexion", retour: { connecter() })
                     if let erreur {
                         Text(erreur).font(.system(size: 12)).foregroundStyle(.red)
                     }
