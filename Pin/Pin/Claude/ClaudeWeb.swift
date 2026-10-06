@@ -1,6 +1,7 @@
 import Foundation
 import WebKit
 import UIKit
+import ObjectiveC
 
 struct ConversationClaude: Identifiable, Equatable {
     let id: String
@@ -40,8 +41,14 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     private var organisation: String?
     private var flux: [String: (String) -> Void] = [:]
     private var demarre = false
+    /// Vrai pendant que la page est montée à l'écran (connexion).
+    private var affichee = false
+    /// Le clavier Pin, qui remplace celui d'iOS dans la page de connexion.
+    weak var clavier: Clavier?
 
-    private static let racine = URL(string: "https://claude.ai/")!
+    /// Page de repos : légère, sans champ de saisie, mais sur claude.ai, ce
+    /// qui suffit pour appeler le site avec ta session.
+    private static let racine = URL(string: "https://claude.ai/robots.txt")!
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -51,6 +58,78 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
         web.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1"
         web.navigationDelegate = self
         web.configuration.userContentController.add(RelaisMessages(self), contentWorld: .page, name: "pin")
+        web.configuration.userContentController.add(RelaisMessages(self), contentWorld: .page, name: "pinFocus")
+        web.configuration.userContentController.addUserScript(WKUserScript(
+            source: Self.scriptFocus, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .page))
+        SansClavierSysteme.installer()
+    }
+
+    /// Prévient Pin quand un champ de la page prend ou perd le focus.
+    private static let scriptFocus = """
+    (function () {
+      function info(el) {
+        if (!el) return null;
+        var t = el.tagName;
+        var ok = el.isContentEditable || t === 'TEXTAREA' ||
+          (t === 'INPUT' && ['button','submit','checkbox','radio','hidden','file','image','reset','range','color'].indexOf(el.type) < 0);
+        if (!ok) return null;
+        return { focus: true, type: el.type || '', mode: el.inputMode || '', auto: el.autocomplete || '' };
+      }
+      document.addEventListener('focusin', function (e) {
+        var i = info(e.target);
+        if (i) window.webkit.messageHandlers.pinFocus.postMessage(i);
+      }, true);
+      document.addEventListener('focusout', function () {
+        setTimeout(function () {
+          if (!info(document.activeElement)) window.webkit.messageHandlers.pinFocus.postMessage({ focus: false });
+        }, 60);
+      }, true);
+    })();
+    """
+
+    fileprivate func focus(_ corps: Any) {
+        guard affichee, let d = corps as? [String: Any], let clavier else { return }
+        guard (d["focus"] as? Bool) == true else {
+            if clavier.champ == Clavier.champWeb { clavier.fermer() }
+            return
+        }
+        let type = (d["type"] as? String) ?? ""
+        let mode = (d["mode"] as? String) ?? ""
+        let auto = (d["auto"] as? String) ?? ""
+        let typeClavier: TypeClavier
+        if type == "email" || auto.contains("email") {
+            typeClavier = .email
+        } else if mode == "numeric" || mode == "decimal" || type == "number" || auto == "one-time-code" {
+            typeClavier = .numero
+        } else if type == "tel" || mode == "tel" {
+            typeClavier = .telephone
+        } else {
+            typeClavier = .email   // pas de majuscule automatique dans les formulaires
+        }
+        let w = web
+        clavier.ouvrirWeb(type: typeClavier, cible: .init(
+            inserer: { t in
+                w.callAsyncJavaScript("document.execCommand('insertText', false, t);", arguments: ["t": t],
+                                      in: nil, in: .page, completionHandler: nil)
+            },
+            effacer: {
+                w.evaluateJavaScript("document.execCommand('delete', false);", completionHandler: nil)
+            },
+            valider: {
+                w.evaluateJavaScript("""
+                (function () {
+                  var el = document.activeElement; if (!el) return;
+                  var o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+                  var libre = el.dispatchEvent(new KeyboardEvent('keydown', o));
+                  el.dispatchEvent(new KeyboardEvent('keypress', o));
+                  el.dispatchEvent(new KeyboardEvent('keyup', o));
+                  if (libre && el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }
+                })();
+                """, completionHandler: nil)
+            },
+            quitter: {
+                w.evaluateJavaScript("document.activeElement && document.activeElement.blur();", completionHandler: nil)
+            }))
     }
 
     func demarrer() {
@@ -68,6 +147,9 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.garer() }
             return
         }
+        affichee = false
+        if let clavier, clavier.champ == Clavier.champWeb { clavier.fermer() }
+        if etat == .pret, web.url?.path != Self.racine.path { web.load(URLRequest(url: Self.racine)) }
         guard web.superview !== fenetre else { return }
         web.removeFromSuperview()
         web.frame = CGRect(x: 0, y: 0, width: 2, height: 2)
@@ -78,6 +160,7 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// Montre la WebView dans un conteneur (écran de connexion).
     func afficher(dans conteneur: UIView) {
+        affichee = true
         web.removeFromSuperview()
         web.alpha = 1
         web.isUserInteractionEnabled = true
@@ -319,6 +402,34 @@ private final class RelaisMessages: NSObject, WKScriptMessageHandler {
     init(_ cible: ClaudeWeb) { self.cible = cible }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        cible?.recevoir(message.body)
+        if message.name == "pinFocus" { cible?.focus(message.body) } else { cible?.recevoir(message.body) }
+    }
+}
+
+/// Empêche le clavier d'iOS d'apparaître dans les pages web de Pin : la vue
+/// de saisie de WebKit reçoit une vue vide à la place du clavier système, et
+/// c'est le clavier Pin qui s'affiche sous l'écran.
+private enum SansClavierSysteme {
+    private static var fait = false
+    private static let vide: UIView = {
+        let v = UIView(frame: .zero)
+        v.autoresizingMask = []
+        return v
+    }()
+
+    static func installer() {
+        guard !fait, let classe = NSClassFromString("WKContentView") else { return }
+        fait = true
+        let videBloc: @convention(block) (AnyObject) -> UIView? = { _ in SansClavierSysteme.vide }
+        let rienBloc: @convention(block) (AnyObject) -> UIView? = { _ in nil }
+        remplacer(classe, #selector(getter: UIResponder.inputView), imp_implementationWithBlock(videBloc))
+        remplacer(classe, #selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(rienBloc))
+    }
+
+    /// Ajoute la méthode à WKContentView seulement (jamais à UIResponder).
+    private static func remplacer(_ classe: AnyClass, _ sel: Selector, _ imp: IMP) {
+        if !class_addMethod(classe, sel, imp, "@@:"), let m = class_getInstanceMethod(classe, sel) {
+            method_setImplementation(m, imp)
+        }
     }
 }

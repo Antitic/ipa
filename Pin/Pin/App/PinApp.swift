@@ -27,7 +27,10 @@ struct PinApp: App {
                 .preferredColorScheme(.light)
                 .statusBarHidden(true)
                 .task { await compte.verifier() }
-                .task { ClaudeWeb.partage.demarrer() }
+                .task {
+                    ClaudeWeb.partage.clavier = clavier
+                    ClaudeWeb.partage.demarrer()
+                }
                 .onChange(of: compte.connecte) { _, connecte in
                     if connecte { whatsapp.demarrer() } else { whatsapp.arreter() }
                 }

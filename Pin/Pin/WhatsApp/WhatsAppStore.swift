@@ -24,6 +24,7 @@ private struct StatutWA: Decodable {
     let lie: Bool
     let connecte: Bool?
     let code: String?
+    let erreur: String?
 }
 
 private struct Evenement: Decodable {
@@ -41,6 +42,7 @@ final class WhatsAppStore: ObservableObject {
     @Published private(set) var discussions: [Discussion] = []
     @Published private(set) var messages: [String: [MessageWA]] = [:]
     @Published private(set) var codeJumelage: String?
+    @Published private(set) var erreurLiaison: String?
 
     var nonLus: Int { discussions.reduce(0) { $0 + ($1.nonLus ?? 0) } }
     var discussionOuverte: String?
@@ -109,8 +111,9 @@ final class WhatsAppStore: ObservableObject {
         guard let s = try? await API.get("/api/whatsapp/statut", StatutWA.self) else { return }
         lie = s.lie
         connecte = s.connecte ?? false
-        if s.code != nil { codeJumelage = s.code }
-        if s.connecte == true { codeJumelage = nil }
+        // Le code affiché suit le serveur : s'il a expiré là-bas, il disparaît ici.
+        codeJumelage = (s.connecte == true || s.lie) ? nil : s.code
+        erreurLiaison = s.erreur
     }
 
     func rafraichirDiscussions() async {
@@ -157,6 +160,7 @@ final class WhatsAppStore: ObservableObject {
 
     func lier(numero: String) async throws -> String {
         struct R: Decodable { let code: String }
+        erreurLiaison = nil
         let r = try await API.post("/api/whatsapp/lier-numero", ["numero": numero], R.self)
         codeJumelage = r.code
         return r.code

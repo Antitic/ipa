@@ -43,6 +43,7 @@ struct EcranDiscussions: View {
 struct EcranLiaisonWhatsApp: View {
     @EnvironmentObject var nav: Navigateur
     @EnvironmentObject var whatsapp: WhatsAppStore
+    @EnvironmentObject var clavier: Clavier
     @State private var numero = "33"
     @State private var erreur: String?
     @State private var enCours = false
@@ -61,14 +62,18 @@ struct EcranLiaisonWhatsApp: View {
                         .font(.system(size: 26, weight: .bold, design: .monospaced))
                         .frame(maxWidth: .infinity)
                         .textSelection(.enabled)
-                    Text("En attente de la liaison…").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("En attente de la liaison… (le code reste valable environ 3 minutes)")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    BoutonIPod(titre: enCours ? "Demande…" : "Nouveau code", actif: !enCours) { lier(nouveau: true) }
                 } else {
                     Text("Ton numéro WhatsApp avec l'indicatif, sans + ni 0 (ex. 33612345678).")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                     ChampIPod(titre: "33612345678", texte: $numero, type: .numero, libelleRetour: "code", retour: { lier() })
                     BoutonIPod(titre: enCours ? "Demande…" : "Obtenir un code", actif: !enCours) { lier() }
                 }
-                if let erreur { Text(erreur).font(.system(size: 12)).foregroundStyle(.red) }
+                if let e = erreur ?? whatsapp.erreurLiaison {
+                    Text(e).font(.system(size: 12)).foregroundStyle(.red)
+                }
             }
             .padding(12)
         }
@@ -82,8 +87,9 @@ struct EcranLiaisonWhatsApp: View {
         }
     }
 
-    private func lier() {
-        guard !whatsapp.lie, whatsapp.codeJumelage == nil, !enCours else { return }
+    private func lier(nouveau: Bool = false) {
+        guard !whatsapp.lie, nouveau || whatsapp.codeJumelage == nil, !enCours else { return }
+        clavier.fermer()
         enCours = true
         erreur = nil
         Task {

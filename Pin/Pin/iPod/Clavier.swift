@@ -18,10 +18,34 @@ final class Clavier: ObservableObject {
 
     private var cible: Binding<String>?
     private var retour: (() -> Void)?
+
+    /// Saisie dans une page web (connexion claude.ai) : le texte n'est pas une
+    /// variable de Pin, il est inséré directement dans le champ de la page.
+    struct CibleWeb {
+        let inserer: (String) -> Void
+        let effacer: () -> Void
+        let valider: () -> Void
+        let quitter: () -> Void
+    }
+    private var web: CibleWeb?
+    static let champWeb = UUID()
     private var dernierMaj = Date.distantPast
     private var dernierEspace = Date.distantPast
 
+    func ouvrirWeb(type: TypeClavier, cible: CibleWeb) {
+        self.cible = nil
+        retour = nil
+        web = cible
+        self.type = type
+        libelleRetour = "OK"
+        champ = Self.champWeb
+        couche = .lettres
+        maj = .aucune
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { actif = true }
+    }
+
     func ouvrir(champ id: UUID, texte: Binding<String>, type: TypeClavier, libelleRetour: String, retour: (() -> Void)?) {
+        web = nil
         cible = texte
         self.retour = retour
         self.type = type
@@ -34,7 +58,9 @@ final class Clavier: ObservableObject {
 
     func fermer() {
         guard actif else { return }
+        web?.quitter()
         cible = nil
+        web = nil
         retour = nil
         champ = nil
         withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { actif = false }
@@ -50,14 +76,24 @@ final class Clavier: ObservableObject {
     // MARK: - Saisie
 
     func taper(_ s: String) {
-        guard let cible else { return }
         let car = majuscules && couche == .lettres ? s.uppercased() : s
+        if let web {
+            web.inserer(car)
+            if maj == .une { maj = .aucune }
+            return
+        }
+        guard let cible else { return }
         cible.wrappedValue += car
         if maj == .une { maj = .aucune }
         if [".", "!", "?"].contains(s) { majAuto() }
     }
 
     func espace() {
+        if let web {
+            web.inserer(" ")
+            if couche != .lettres { couche = .lettres }
+            return
+        }
         guard let cible else { return }
         // Double espace = point, comme sur iOS.
         let maintenant = Date()
@@ -75,6 +111,7 @@ final class Clavier: ObservableObject {
     }
 
     func effacer() {
+        if let web { web.effacer(); return }
         guard let cible, !cible.wrappedValue.isEmpty else { return }
         cible.wrappedValue.removeLast()
         majAuto()
@@ -91,7 +128,9 @@ final class Clavier: ObservableObject {
     }
 
     func valider() {
-        if let retour {
+        if let web {
+            web.valider()
+        } else if let retour {
             retour()
         } else if let cible, type == .texte {
             cible.wrappedValue += "\n"
@@ -360,13 +399,27 @@ private struct VueTouche: View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(fond)
-                .shadow(color: .black.opacity(0.28), radius: 0, y: 1)
+                .shadow(color: .black.opacity(enfoncee ? 0.1 : 0.28), radius: 0, y: enfoncee ? 0 : 1)
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(Color.black.opacity(0.12), lineWidth: 0.5)
+            // Reflet qui s'allume sous le doigt.
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(RadialGradient(colors: [Color(red: 0.42, green: 0.66, blue: 0.95).opacity(0.35), .clear],
+                                     center: .center, startRadius: 0, endRadius: max(largeur, hauteur) * 0.7))
+                .opacity(enfoncee && !speciale ? 1 : 0)
             etiquette
+                .scaleEffect(enfoncee ? 1.12 : 1)
         }
         .frame(width: largeur, height: hauteur)
-        .overlay(alignment: .bottom) { apercu }
+        // La touche s'enfonce puis rebondit en se relâchant.
+        .scaleEffect(enfoncee ? 0.88 : 1)
+        .offset(y: enfoncee ? 1.5 : 0)
+        .animation(.spring(response: 0.16, dampingFraction: 0.5), value: enfoncee)
+        .overlay(alignment: .bottom) {
+            apercu
+                .animation(.spring(response: 0.2, dampingFraction: 0.62), value: enfoncee)
+                .animation(.spring(response: 0.22, dampingFraction: 0.7), value: accents)
+        }
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -444,6 +497,7 @@ private struct VueTouche: View {
                     )
                     .offset(y: -hauteur - 4)
                     .allowsHitTesting(false)
+                    .transition(.scale(scale: 0.3, anchor: .bottom).combined(with: .opacity))
             } else {
                 HStack(spacing: 0) {
                     ForEach(Array(ordreAffiche.enumerated()), id: \.offset) { _, i in
@@ -469,6 +523,7 @@ private struct VueTouche: View {
                 .fixedSize()
                 .offset(x: decalageAccents, y: -hauteur - 6)
                 .allowsHitTesting(false)
+                .transition(.scale(scale: 0.5, anchor: aDroite ? .bottomTrailing : .bottomLeading).combined(with: .opacity))
             }
         }
     }
