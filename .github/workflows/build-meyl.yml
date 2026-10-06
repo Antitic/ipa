@@ -73,7 +73,7 @@ jobs:
           files: Meyl/Meyl.ipa
           make_latest: false
           body: |
-            IPA non signée de Meyl — le courrier de mail.dipherant.xyz. Thème Codex (blanc, Garamond, tramage pixel) ou Écritoire, au choix dans les réglages.
+            IPA non signée de Meyl — le courrier de mail.dipherant.xyz. Thème Codex (blanc, Garamond, tramage pixel, rose Dipherant) ou Écritoire, au choix dans les réglages.
             Installe-la avec LiveContainer, SideStore, AltStore ou Sideloadly.
 
   captures:

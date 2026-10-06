@@ -4,7 +4,7 @@ Deux thèmes, au choix dans **Réglages** :
 
 - **Codex** (par défaut) : fond blanc, tout en Garamond (EB Garamond, dans l'esprit des titres
   « Think Different »), illustrations et indicateurs en tramage pixel (Bayer 8×8, animé pendant les
-  chargements), dates, compteurs et étiquettes en police bitmap (Silkscreen), accent turquoise.
+  chargements), dates, compteurs et étiquettes en police bitmap (Silkscreen), accent rose Dipherant (#FF1F6B).
 - **Écritoire** : le thème skeuomorphique d'origine (noyer, cuir surpiqué, casiers en laiton,
   enveloppes crème, sceau de cire).
 

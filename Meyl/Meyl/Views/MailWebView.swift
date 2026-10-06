@@ -54,7 +54,7 @@ struct MailWebView: UIViewRepresentable {
         """
         var tail = "<style>html,body{background:transparent !important;} body{padding:4px 2px 24px !important; -webkit-text-size-adjust:100%;}</style>"
         if codex {
-            tail += "<style>\(garamondFace) html,body{font-family:'MeylGaramond',Georgia,serif;font-size:19px;line-height:1.5;color:#091717;} body{padding:18px 22px 40px !important;} pre.plain{font-family:'MeylGaramond',Georgia,serif;font-size:19px;} a{color:#20808D;} blockquote{border-left:2px solid #E4E2D9;color:#556161;} pre.plain .q{color:#8F9A99;}</style>"
+            tail += "<style>\(garamondFace) html,body{font-family:'MeylGaramond',Georgia,serif;font-size:19px;line-height:1.5;color:#091717;} body{padding:18px 22px 40px !important;} pre.plain{font-family:'MeylGaramond',Georgia,serif;font-size:19px;} a{color:#FF1F6B;} blockquote{border-left:2px solid #E4E2D9;color:#556161;} pre.plain .q{color:#8F9A99;}</style>"
         }
         var s = html
         if let r = s.range(of: "<head>", options: .caseInsensitive) {

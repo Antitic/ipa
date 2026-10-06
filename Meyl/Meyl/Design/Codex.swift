@@ -18,7 +18,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
     var blurb: String {
         switch self {
-        case .codex: return "Blanc, Garamond et tramage pixel."
+        case .codex: return "Blanc, Garamond, tramage pixel et rose Dipherant."
         case .ecritoire: return "Noyer, cuir, laiton et cire."
         }
     }
@@ -33,10 +33,10 @@ enum CX {
     static let ink = Color(red: 0.035, green: 0.090, blue: 0.090)       // presque noir, teinté
     static let ink2 = Color(red: 0.33, green: 0.38, blue: 0.38)
     static let ink3 = Color(red: 0.58, green: 0.61, blue: 0.60)
-    static let teal = Color(red: 0.125, green: 0.502, blue: 0.553)      // #20808D
-    static let tealBright = Color(red: 0.122, green: 0.722, blue: 0.804) // #1FB8CD
-    static let tealWash = Color(red: 0.125, green: 0.502, blue: 0.553).opacity(0.08)
-    static let red = Color(red: 0.72, green: 0.17, blue: 0.13)
+    static let teal = Color(red: 1.0, green: 0.122, blue: 0.420)        // #FF1F6B — rose Dipherant
+    static let tealBright = Color(red: 1.0, green: 0.361, blue: 0.784)  // #FF5CC8
+    static let tealWash = Color(red: 1.0, green: 0.122, blue: 0.420).opacity(0.08)
+    static let red = Color(red: 0.62, green: 0.10, blue: 0.08)
 
     // MARK: Garamond partout
 
