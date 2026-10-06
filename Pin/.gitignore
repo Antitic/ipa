@@ -1,0 +1,7 @@
+*.xcodeproj
+build/
+build-sim/
+Payload/
+*.ipa
+Pin/Info.plist
+Pin/Ressources/Assets.xcassets/AppIcon.appiconset/icon.png
