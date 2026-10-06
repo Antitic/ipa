@@ -4,14 +4,13 @@ import UIKit
 struct HomeView: View {
     @EnvironmentObject var store: MailStore
     @Binding var compose: Draft?
-    @State private var askLogout = false
 
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
     var body: some View {
         VStack(spacing: 0) {
             LeatherHeader(title: "Courrier", subtitle: store.isDemo ? "démonstration" : nil, leading: {
-                LeatherButton(symbol: "gearshape.fill") { askLogout = true }
+                LeatherButton(symbol: "gearshape.fill") { store.showSettings = true }
             }, trailing: {
                 LeatherButton(symbol: "square.and.pencil") { compose = Draft() }
             })
@@ -44,11 +43,6 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .task {
             if store.rows["INBOX"] == nil { await store.load("INBOX") }
-        }
-        .confirmationDialog("Compte \(store.user)", isPresented: $askLogout, titleVisibility: .visible) {
-            Button("Relever le courrier") { Task { await store.load("INBOX") } }
-            Button("Se déconnecter", role: .destructive) { store.logout() }
-            Button("Annuler", role: .cancel) {}
         }
     }
 

@@ -16,6 +16,7 @@ final class MailStore: ObservableObject {
     @Published var loading: Set<String> = []
     @Published var toast: Toast?
     @Published private(set) var isDemo = false
+    @Published var showSettings = false
 
     private var pollTask: Task<Void, Never>?
     private var messageCache: [String: MailMessage] = [:]

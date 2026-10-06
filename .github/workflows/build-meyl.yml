@@ -73,7 +73,7 @@ jobs:
           files: Meyl/Meyl.ipa
           make_latest: false
           body: |
-            IPA non signée de Meyl — le courrier de mail.dipherant.xyz dans une écritoire skeuomorphique.
+            IPA non signée de Meyl — le courrier de mail.dipherant.xyz. Thème Codex (blanc, Garamond, tramage pixel) ou Écritoire, au choix dans les réglages.
             Installe-la avec LiveContainer, SideStore, AltStore ou Sideloadly.
 
   captures:
@@ -96,7 +96,7 @@ jobs:
           UDID=$(xcrun simctl create captures "${TYPE:-iPhone 16 Pro}")
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl ui "$UDID" appearance dark || true
+          xcrun simctl ui "$UDID" appearance light || true
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 || true
           xcrun simctl install "$UDID" build-sim/Build/Products/Debug-iphonesimulator/Meyl.app
           mkdir -p captures
@@ -110,10 +110,13 @@ jobs:
           xcrun simctl launch "$UDID" com.antitic.meyl
           sleep 6
           xcrun simctl io "$UDID" screenshot captures/01-connexion.png
-          shot 02-casiers
-          shot 03-reception -openBox INBOX
-          shot 04-lettre -openBox INBOX -openMessage 218
-          shot 05-redaction -openCompose YES
+          shot 02-reception
+          shot 03-message -openMessage 218
+          shot 04-redaction -openCompose YES
+          shot 05-reglages -openSettings YES
+          shot 06-archive -openBox Archive
+          shot 07-ecritoire -theme ecritoire
+          shot 08-ecritoire-lettre -theme ecritoire -openBox INBOX -openMessage 218
       - name: Publier les captures (branche meyl-captures)
         run: |
           cp -R captures "$RUNNER_TEMP/caps" && cd "$RUNNER_TEMP/caps"

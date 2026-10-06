@@ -8,6 +8,7 @@ import WebKit
 struct MailWebView: UIViewRepresentable {
     let html: String
     let allowRemote: Bool
+    var codex = false
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -27,25 +28,45 @@ struct MailWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
-        let doc = Self.prepare(html, allowRemote: allowRemote)
+        let doc = Self.prepare(html, allowRemote: allowRemote, codex: codex)
         guard context.coordinator.loaded != doc else { return }
         context.coordinator.loaded = doc
         web.loadHTMLString(doc, baseURL: nil)
     }
 
-    static func prepare(_ html: String, allowRemote: Bool) -> String {
+    /// Garamond embarquée en data: (le moteur web ne voit pas les polices de l'app).
+    static let garamondFace: String = {
+        func face(_ file: String, style: String, weight: Int) -> String {
+            guard let url = Bundle.main.url(forResource: file, withExtension: "ttf"),
+                  let data = try? Data(contentsOf: url) else { return "" }
+            return "@font-face{font-family:'MeylGaramond';font-style:\(style);font-weight:\(weight);src:url(data:font/ttf;base64,\(data.base64EncodedString())) format('truetype');}"
+        }
+        return face("EBGaramond-Regular", style: "normal", weight: 400)
+            + face("EBGaramond-Italic", style: "italic", weight: 400)
+            + face("EBGaramond-SemiBold", style: "normal", weight: 700)
+    }()
+
+    static func prepare(_ html: String, allowRemote: Bool, codex: Bool = false) -> String {
         let csp = "default-src 'none'; img-src data: \(allowRemote ? "https: http:" : ""); style-src 'unsafe-inline'; font-src data:; form-action 'none'"
         let head = """
         <meta http-equiv="Content-Security-Policy" content="\(csp)">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>html,body{background:transparent !important;} body{padding:4px 2px 24px !important; -webkit-text-size-adjust:100%;}</style>
         """
-        if let r = html.range(of: "<head>", options: .caseInsensitive) {
-            var s = html
-            s.insert(contentsOf: head, at: r.upperBound)
-            return s
+        var tail = "<style>html,body{background:transparent !important;} body{padding:4px 2px 24px !important; -webkit-text-size-adjust:100%;}</style>"
+        if codex {
+            tail += "<style>\(garamondFace) html,body{font-family:'MeylGaramond',Georgia,serif;font-size:19px;line-height:1.5;color:#091717;} body{padding:18px 22px 40px !important;} pre.plain{font-family:'MeylGaramond',Georgia,serif;font-size:19px;} a{color:#20808D;} blockquote{border-left:2px solid #E4E2D9;color:#556161;} pre.plain .q{color:#8F9A99;}</style>"
         }
-        return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" + head + "</head><body>" + html + "</body></html>"
+        var s = html
+        if let r = s.range(of: "<head>", options: .caseInsensitive) {
+            s.insert(contentsOf: head, at: r.upperBound)
+        } else {
+            s = "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" + head + "</head><body>" + s + "</body></html>"
+        }
+        // Nos styles en fin d'en-tête : ils passent après ceux du serveur.
+        if let r = s.range(of: "</head>", options: .caseInsensitive) {
+            s.insert(contentsOf: tail, at: r.lowerBound)
+        }
+        return s
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {

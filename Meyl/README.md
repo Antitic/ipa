@@ -1,9 +1,14 @@
 # Meyl — le courrier de dipherant.xyz sur iPhone
 
-Une app iOS en skeuomorphisme assumé, façon écritoire : bureau en noyer verni, barres en cuir
-surpiqué, casiers à lettres en laiton vissé avec pastilles émaillées pour les non-lus, lettres
-présentées comme des enveloppes crème (liseré « par avion » sur les non-lues), cachet de la poste
-pour la date, étiquettes Dymo et bouton d'envoi en sceau de cire.
+Deux thèmes, au choix dans **Réglages** :
+
+- **Codex** (par défaut) : fond blanc, tout en Garamond (EB Garamond, dans l'esprit des titres
+  « Think Different »), illustrations et indicateurs en tramage pixel (Bayer 8×8, animé pendant les
+  chargements), dates, compteurs et étiquettes en police bitmap (Silkscreen), accent turquoise.
+- **Écritoire** : le thème skeuomorphique d'origine (noyer, cuir surpiqué, casiers en laiton,
+  enveloppes crème, sceau de cire).
+
+Les polices sont sous licence SIL Open Font License (fichiers `Resources/Fonts/OFL-*.txt`).
 
 Elle lit le courrier reçu par le serveur mail du homelab (maddy) en passant par le webmail
 `mail.dipherant.xyz`, donc par le tunnel Cloudflare : rien à ouvrir sur la box.
