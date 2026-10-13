@@ -6,24 +6,32 @@ struct Coque: View {
 
     var body: some View {
         GeometryReader { g in
+            // La vue ignore la zone sûre (le boîtier va jusqu'aux bords), donc
+            // g.safeAreaInsets vaut 0 : on lit les marges réelles de la fenêtre
+            // pour que l'écran passe sous l'encoche (47 pt sur iPhone 13).
+            let marges = MargesFenetre.actuelles
+            let haut = MargesFenetre.haut(marges) + 10
+            let bas = max(marges.bottom, 6)
             let largeur = g.size.width
             let marge: CGFloat = 18
-            let hauteurEcran = min(g.size.height * 0.5, (largeur - marge * 2) * 1.05)
-            let cote = max(120, min(largeur * 0.78, g.size.height - hauteurEcran - 60))
+            let disponible = g.size.height - haut
+            let hauteurEcran = min(disponible * 0.52, (largeur - marge * 2) * 1.05)
+            let cote = max(120, min(largeur * 0.78, disponible - hauteurEcran - bas - 24))
             VStack(spacing: 0) {
                 EcranIPod()
                     .frame(height: hauteurEcran)
                     .padding(.horizontal, marge)
-                    .padding(.top, max(g.safeAreaInsets.top, 14))
+                    .padding(.top, haut)
                 ZStack {
                     if clavier.actif {
                         // Le clavier Pin prend la place de la molette.
                         ClavierIPod()
-                            .padding(.bottom, max(g.safeAreaInsets.bottom, 6))
+                            .padding(.bottom, bas)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else {
                         Molette()
                             .frame(width: cote, height: cote)
+                            .padding(.bottom, bas / 2)
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
                 }
@@ -34,6 +42,25 @@ struct Coque: View {
         }
         .ignoresSafeArea(.container, edges: [.top, .bottom])
         .ignoresSafeArea(.keyboard)
+    }
+}
+
+/// Les marges de sécurité de la fenêtre (encoche, barre d'accueil).
+enum MargesFenetre {
+    @MainActor static var actuelles: UIEdgeInsets {
+        let fenetres = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        return (fenetres.first(where: \.isKeyWindow) ?? fenetres.first)?.safeAreaInsets ?? .zero
+    }
+
+    /// Marge du haut. Si la fenêtre annonce une marge trop petite (barre d'état
+    /// masquée, app lancée dans LiveContainer…) alors que l'iPhone a une barre
+    /// d'accueil, c'est qu'il a une encoche ou une Dynamic Island : 47 pt au moins.
+    @MainActor static func haut(_ m: UIEdgeInsets) -> CGFloat {
+        // Tous les iPhone à encoche font au moins 812 pt de haut ; les autres (SE, 8) moins.
+        if m.bottom > 0 || UIScreen.main.bounds.height >= 812 { return max(m.top, 47) }
+        return max(m.top, 20)
     }
 }
 

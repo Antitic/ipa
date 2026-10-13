@@ -158,6 +158,12 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
         fenetre.insertSubview(web, at: 0)
     }
 
+    /// Molette sur la page affichée.
+    func defiler(_ dy: CGFloat) {
+        guard affichee else { return }
+        DefilementMolette.defiler(web.scrollView, de: dy)
+    }
+
     /// Montre la WebView dans un conteneur (écran de connexion).
     func afficher(dans conteneur: UIView) {
         affichee = true

@@ -190,19 +190,25 @@ struct BarreProgression: View {
 struct EcranTelegram: View {
     @EnvironmentObject var nav: Navigateur
     @State private var statut: StatutTelegram?
+    /// "api-telephone", "api-code", "api-manuel" (identifiants d'API), puis "telephone", "code", "mot-de-passe".
     @State private var etape = "telephone"
     @State private var telephone = "+33"
     @State private var code = ""
+    @State private var codeApi = ""
+    @State private var apiId = ""
+    @State private var apiHash = ""
     @State private var motDePasse = ""
     @State private var erreur: String?
     @State private var enCours = false
 
-    private struct Reponse: Decodable { let etape: String?; let lie: Bool? }
+    private struct Reponse: Decodable { let etape: String?; let lie: Bool?; let etapeApi: String?; let configure: Bool? }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if let s = statut, s.lie {
+                if statut == nil {
+                    Text("Chargement…").font(.system(size: 12)).foregroundStyle(.secondary)
+                } else if let s = statut, s.lie {
                     Text("Telegram est lié").font(.system(size: 15, weight: .semibold))
                     if let nom = s.nom { Text(nom).font(.system(size: 13)).foregroundStyle(.secondary) }
                     Text("La musique épinglée sur ton profil apparaît dans Musique.")
@@ -213,22 +219,44 @@ struct EcranTelegram: View {
                             await rafraichir()
                         }
                     }
-                } else if statut?.configure == false {
-                    Text("Le serveur n'a pas encore d'identifiants Telegram (TG_API_ID et TG_API_HASH dans pin.env).")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                } else if etape == "telephone" {
-                    Text("Ton numéro Telegram, avec l'indicatif.").font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "+33 6 12 34 56 78", texte: $telephone, type: .telephone, libelleRetour: "envoyer", retour: { valider() })
-                    BoutonIPod(titre: enCours ? "Envoi…" : "Recevoir le code", actif: !enCours) { valider() }
-                } else if etape == "code" {
-                    Text("Tape le code reçu dans Telegram.").font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "Code", texte: $code, type: .numero, libelleRetour: "valider", retour: { valider() })
-                    BoutonIPod(titre: enCours ? "Vérification…" : "Valider", actif: !enCours && !code.isEmpty) { valider() }
                 } else {
-                    Text("Ton compte a un mot de passe (validation en deux étapes).")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                    ChampIPod(titre: "Mot de passe Telegram", texte: $motDePasse, secret: true, libelleRetour: "valider", retour: { valider() })
-                    BoutonIPod(titre: enCours ? "Vérification…" : "Valider", actif: !enCours && !motDePasse.isEmpty) { valider() }
+                    switch etape {
+                    case "api-telephone":
+                        Text("Étape 1 sur 2").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                        Text("Pin doit d'abord obtenir une clé d'API Telegram. Ton numéro, avec l'indicatif : Telegram t'enverra un code (dans l'app, pas par SMS).")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        ChampIPod(titre: "+33 6 12 34 56 78", texte: $telephone, type: .telephone, libelleRetour: "envoyer", retour: { valider() })
+                        BoutonIPod(titre: enCours ? "Envoi…" : "Recevoir le code", actif: !enCours) { valider() }
+                        BoutonIPod(titre: "J'ai déjà api_id et api_hash") { erreur = nil; etape = "api-manuel" }
+                    case "api-code":
+                        Text("Étape 1 sur 2").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                        Text("Tape le code envoyé par Telegram (message de « Telegram », il contient des lettres et des chiffres).")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        ChampIPod(titre: "Code", texte: $codeApi, type: .texte, libelleRetour: "valider", retour: { valider() })
+                        BoutonIPod(titre: enCours ? "Création de la clé…" : "Valider", actif: !enCours && !codeApi.isEmpty) { valider() }
+                        BoutonIPod(titre: "Redemander un code") { erreur = nil; codeApi = ""; etape = "api-telephone" }
+                    case "api-manuel":
+                        Text("Copie-les depuis my.telegram.org › API development tools.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        ChampIPod(titre: "api_id", texte: $apiId, type: .numero)
+                        ChampIPod(titre: "api_hash", texte: $apiHash, type: .texte, libelleRetour: "valider", retour: { valider() })
+                        BoutonIPod(titre: enCours ? "Enregistrement…" : "Enregistrer", actif: !enCours && !apiId.isEmpty && !apiHash.isEmpty) { valider() }
+                        BoutonIPod(titre: "Plutôt par code") { erreur = nil; etape = "api-telephone" }
+                    case "telephone":
+                        Text("Étape 2 sur 2").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                        Text("Connecte ton compte : Telegram va t'envoyer un nouveau code.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        ChampIPod(titre: "+33 6 12 34 56 78", texte: $telephone, type: .telephone, libelleRetour: "envoyer", retour: { valider() })
+                        BoutonIPod(titre: enCours ? "Envoi…" : "Recevoir le code", actif: !enCours) { valider() }
+                    case "code":
+                        Text("Tape le code reçu dans Telegram.").font(.system(size: 12)).foregroundStyle(.secondary)
+                        ChampIPod(titre: "Code", texte: $code, type: .numero, libelleRetour: "valider", retour: { valider() })
+                        BoutonIPod(titre: enCours ? "Vérification…" : "Valider", actif: !enCours && !code.isEmpty) { valider() }
+                    default:
+                        Text("Ton compte a un mot de passe (validation en deux étapes).")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                        ChampIPod(titre: "Mot de passe Telegram", texte: $motDePasse, secret: true, libelleRetour: "valider", retour: { valider() })
+                        BoutonIPod(titre: enCours ? "Vérification…" : "Valider", actif: !enCours && !motDePasse.isEmpty) { valider() }
+                    }
                 }
                 if let erreur {
                     Text(erreur).font(.system(size: 12)).foregroundStyle(.red)
@@ -241,8 +269,21 @@ struct EcranTelegram: View {
     }
 
     private func rafraichir() async {
-        statut = try? await API.get("/api/telegram/statut", StatutTelegram.self)
-        if let e = statut?.etape { etape = e } else if statut?.lie == false { etape = "telephone" }
+        do {
+            let s = try await API.get("/api/telegram/statut", StatutTelegram.self)
+            statut = s
+            if s.lie { return }
+            if s.configure == false {
+                if s.etapeApi == "code" { etape = "api-code" }
+                else if !etape.hasPrefix("api-") { etape = "api-telephone" }
+            } else if let e = s.etape {
+                etape = e
+            } else if etape.hasPrefix("api-") || etape == "telephone" {
+                etape = "telephone"
+            }
+        } catch {
+            erreur = error.localizedDescription
+        }
     }
 
     private func valider() {
@@ -253,6 +294,12 @@ struct EcranTelegram: View {
             do {
                 let r: Reponse
                 switch etape {
+                case "api-telephone":
+                    r = try await API.post("/api/telegram/api/code", ["telephone": telephone], Reponse.self)
+                case "api-code":
+                    r = try await API.post("/api/telegram/api/valider", ["code": codeApi], Reponse.self)
+                case "api-manuel":
+                    r = try await API.post("/api/telegram/api/manuel", ["apiId": apiId, "apiHash": apiHash], Reponse.self)
                 case "telephone":
                     r = try await API.post("/api/telegram/code", ["telephone": telephone], Reponse.self)
                 case "code":
@@ -260,9 +307,15 @@ struct EcranTelegram: View {
                 default:
                     r = try await API.post("/api/telegram/connexion", ["motDePasse": motDePasse], Reponse.self)
                 }
-                if r.lie == true {
+                if r.configure == true {
+                    // Clé obtenue : on enchaîne sur la connexion du compte.
+                    etape = "telephone"
+                    await rafraichir()
+                } else if r.lie == true {
                     await rafraichir()
                     nav.retour()
+                } else if r.etapeApi == "code" {
+                    etape = "api-code"
                 } else if let e = r.etape {
                     etape = e
                 }

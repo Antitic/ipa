@@ -16,6 +16,7 @@ struct StatutTelegram: Decodable {
     let nom: String?
     let etape: String?
     let configure: Bool?
+    let etapeApi: String?
 }
 
 /// Le lecteur de musique. Chaque morceau est d'abord téléchargé dans le cache

@@ -64,8 +64,8 @@ struct EcranClaude: View {
     }
 }
 
-/// Une discussion : les messages en bulles, la molette défile paragraphe par
-/// paragraphe, le centre ouvre le clavier Pin.
+/// Une discussion : les messages en bulles, la molette fait défiler la page
+/// en continu, le centre ouvre le clavier Pin.
 struct EcranDiscussionClaude: View {
     let uuidDepart: String
     let nom: String
@@ -73,6 +73,7 @@ struct EcranDiscussionClaude: View {
     @EnvironmentObject var nav: Navigateur
     @EnvironmentObject var clavier: Clavier
     @StateObject private var etat = EtatDiscussionClaude()
+    @StateObject private var defilement = DefilementMolette()
     @State private var idSaisie = UUID()
 
     var body: some View {
@@ -81,7 +82,7 @@ struct EcranDiscussionClaude: View {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(etat.blocs.enumerated()), id: \.element.id) { i, b in
-                            BlocClaude(bloc: b, selectionne: i == etat.index && !clavier.actif)
+                            BlocClaude(bloc: b, selectionne: false)
                                 .id(b.id)
                         }
                         if etat.envoi && etat.reponse.isEmpty {
@@ -94,15 +95,10 @@ struct EcranDiscussionClaude: View {
                         }
                     }
                     .padding(.vertical, 6)
-                }
-                .onChange(of: etat.index) { _, i in
-                    if etat.blocs.indices.contains(i) {
-                        withAnimation(.linear(duration: 0.1)) { proxy.scrollTo(etat.blocs[i].id, anchor: .center) }
-                    }
+                    .background(AncreDefilement(defilement: defilement).frame(width: 0, height: 0), alignment: .top)
                 }
                 .onChange(of: etat.blocs.count) { _, n in
                     guard n > 0 else { return }
-                    etat.index = n - 1
                     proxy.scrollTo(etat.blocs[n - 1].id, anchor: .bottom)
                 }
                 .onChange(of: etat.reponse) { _, _ in
@@ -131,8 +127,8 @@ struct EcranDiscussionClaude: View {
             await etat.charger()
         }
         .roue { g in
-            let e = etat
-            g.tour = { s in e.deplacer(s) }
+            let d = defilement
+            g.tour = { s in d.cran(s) }
             g.centre = { ouvrirClavier() }
             g.lecture = { ouvrirClavier() }
         }
@@ -295,7 +291,10 @@ struct EcranConnexionClaude: View {
         .onChange(of: claude.etat) { _, e in
             if e == .pret { nav.retour() }
         }
-        .roue { _ in }
+        .roue { g in
+            // La molette fait défiler la page de connexion.
+            g.tour = { s in ClaudeWeb.partage.defiler(CGFloat(s) * 32) }
+        }
     }
 }
 
