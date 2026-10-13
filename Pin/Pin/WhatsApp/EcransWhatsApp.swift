@@ -126,7 +126,10 @@ struct EcranConversation: View {
                     LazyVStack(spacing: 4) {
                         ForEach(Array(liste.enumerated()), id: \.element.id) { i, m in
                             Bulle(message: m, selectionne: i == etat.index, groupe: jid.hasSuffix("@g.us"),
-                                  enLecture: lecteurVocal.enCours == m.id)
+                                  enLecture: lecteurVocal.enCours == m.id,
+                                  chargement: lecteurVocal.chargement == m.id,
+                                  progression: lecteurVocal.enCours == m.id ? lecteurVocal.progression : 0,
+                                  position: lecteurVocal.enCours == m.id ? lecteurVocal.position : 0)
                                 .id(m.id)
                                 .onTapGesture {
                                     etat.index = i
@@ -204,6 +207,9 @@ struct EcranConversation: View {
             Button { choixOuvert = true } label: {
                 Image(systemName: "photo.circle").font(.system(size: 20)).foregroundStyle(Color(white: 0.4))
             }
+            Button { nav.ouvrir(.stickers(jid: jid)) } label: {
+                Image(systemName: "face.smiling").font(.system(size: 19)).foregroundStyle(Color(white: 0.4))
+            }
             ZoneSaisie(id: idSaisie, titre: "Message", texte: $etat.texte) { envoyerTexte() }
             if !etat.texte.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button { envoyerTexte() } label: {
@@ -224,6 +230,10 @@ struct EcranConversation: View {
 
     private func tourner(_ s: Int) {
         guard !liste.isEmpty else { return }
+        if let id = lecteurVocal.enCours, liste.indices.contains(etat.index), liste[etat.index].id == id {
+            lecteurVocal.deplacer(Double(s) * 3)
+            return
+        }
         let n = min(max(etat.index + s, 0), liste.count - 1)
         etat.index = n
         if n == 0, s < 0, !etat.chargementAncien {
@@ -246,7 +256,7 @@ struct EcranConversation: View {
     private func activer(_ m: MessageWA) {
         switch m.type {
         case "image": nav.ouvrir(.imageWhatsApp(id: m.id))
-        case "vocal": lecteurVocal.basculer(m.id)
+        case "vocal", "audio": lecteurVocal.basculer(m.id)
         default: ouvrirClavier()
         }
     }
@@ -312,7 +322,18 @@ struct Bulle: View {
     let selectionne: Bool
     let groupe: Bool
     let enLecture: Bool
+    var chargement = false
+    var progression: Double = 0
+    var position: Double = 0
     @State private var image: UIImage?
+
+    private var envoiEnCours: Bool { message.id.hasPrefix("envoi-") }
+    /// Un sticker en cours d'envoi s'affiche avec l'image du sticker choisi.
+    private var idSticker: String? {
+        if message.type == "sticker" { return message.id }
+        if message.type.hasPrefix("sticker-local:") { return String(message.type.dropFirst("sticker-local:".count)) }
+        return nil
+    }
 
     var body: some View {
         HStack {
@@ -322,20 +343,26 @@ struct Bulle: View {
                     Text(a).font(.system(size: 10, weight: .bold)).foregroundStyle(Color(red: 0.1, green: 0.5, blue: 0.4))
                 }
                 contenu
-                Text(Date(timeIntervalSince1970: message.timestamp / 1000), format: .dateTime.hour().minute())
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                HStack(spacing: 3) {
+                    Spacer(minLength: 0)
+                    Text(Date(timeIntervalSince1970: message.timestamp / 1000), format: .dateTime.hour().minute())
+                    if message.deMoi {
+                        Image(systemName: envoiEnCours ? "clock" : "checkmark")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                }
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(message.type == "sticker" ? Color.clear : (message.deMoi ? Color(red: 0.86, green: 0.97, blue: 0.78) : .white))
+                    .fill(idSticker != nil ? Color.clear : (message.deMoi ? Color(red: 0.86, green: 0.97, blue: 0.78) : .white))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(selectionne ? Color(red: 0.16, green: 0.44, blue: 0.86) : (message.type == "sticker" ? Color.clear : Color(white: 0.85)),
+                    .stroke(selectionne ? Color(red: 0.16, green: 0.44, blue: 0.86) : (idSticker != nil ? Color.clear : Color(white: 0.85)),
                             lineWidth: selectionne ? 2 : 0.5)
             )
             if !message.deMoi { Spacer(minLength: 36) }
@@ -344,6 +371,24 @@ struct Bulle: View {
 
     @ViewBuilder
     private var contenu: some View {
+        if let id = idSticker {
+            Group {
+                if let image {
+                    ImageAnimee(image: image)
+                } else {
+                    Color.clear.overlay(ProgressView().scaleEffect(0.7))
+                }
+            }
+            .frame(width: 96, height: 96)
+            .opacity(envoiEnCours ? 0.6 : 1)
+            .task(id: id) { image = await API.image("/api/whatsapp/medias/\(API.segment(id))") }
+        } else {
+            contenuSimple
+        }
+    }
+
+    @ViewBuilder
+    private var contenuSimple: some View {
         switch message.type {
         case "image":
             Group {
@@ -357,28 +402,45 @@ struct Bulle: View {
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .task { image = await API.image("/api/whatsapp/medias/\(API.segment(message.id))?taille=vignette") }
             if let t = message.texte { Text(t).font(.system(size: 13)) }
-        case "sticker":
-            Group {
-                if let image {
-                    ImageAnimee(image: image)
-                } else {
-                    Color.clear.overlay(ProgressView().scaleEffect(0.7))
+        case "audio":
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    iconeLecture
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(message.texte ?? "Audio").font(.system(size: 12, weight: .medium)).lineLimit(1)
+                        Text(enLecture ? "\(minutes(position)) / \(message.duree.map(minutes) ?? "–")"
+                                       : (message.duree.map(minutes) ?? "Audio"))
+                            .font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary)
+                    }
                 }
+                ProgressView(value: progression).tint(Color(red: 0.16, green: 0.44, blue: 0.86)).frame(width: 150)
             }
-            .frame(width: 96, height: 96)
-            .task { image = await API.image("/api/whatsapp/medias/\(API.segment(message.id))") }
         case "vocal":
             HStack(spacing: 6) {
-                Image(systemName: enLecture ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color(red: 0.16, green: 0.44, blue: 0.86))
-                Capsule().fill(Color(white: 0.75)).frame(width: 70, height: 3)
+                iconeLecture
+                ProgressView(value: progression).tint(Color(red: 0.16, green: 0.44, blue: 0.86)).frame(width: 70)
                 Text(message.duree.map { String(format: "%d:%02d", Int($0) / 60, Int($0) % 60) } ?? "🎤")
                     .font(.system(size: 11).monospacedDigit())
             }
         default:
             Text(message.texte ?? "").font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                .opacity(envoiEnCours ? 0.7 : 1)
         }
+    }
+
+    @ViewBuilder
+    private var iconeLecture: some View {
+        if chargement {
+            ProgressView().scaleEffect(0.8).frame(width: 22, height: 22)
+        } else {
+            Image(systemName: enLecture ? "pause.circle.fill" : "play.circle.fill")
+                .font(.system(size: 22))
+                .foregroundStyle(Color(red: 0.16, green: 0.44, blue: 0.86))
+        }
+    }
+
+    private func minutes(_ s: Double) -> String {
+        String(format: "%d:%02d", Int(s) / 60, Int(s) % 60)
     }
 }
 
@@ -475,5 +537,86 @@ extension UIImage {
         format.scale = 1
         let img = UIGraphicsImageRenderer(size: cible, format: format).image { _ in draw(in: CGRect(origin: .zero, size: cible)) }
         return img.jpegData(compressionQuality: 0.82)
+    }
+}
+
+
+/// Les stickers déjà vus (reçus ou envoyés) : la molette choisit, le centre envoie.
+struct EcranStickers: View {
+    let jid: String
+    @EnvironmentObject var nav: Navigateur
+    @EnvironmentObject var whatsapp: WhatsAppStore
+    @State private var index = 0
+    @State private var charge = false
+    @State private var erreur: String?
+
+    private let colonnes = 4
+
+    var body: some View {
+        Group {
+            if whatsapp.stickers.isEmpty {
+                MessageEcran(icone: "face.smiling", texte: charge ? "Aucun sticker" : "Chargement…",
+                             detail: charge ? "Les stickers que tu reçois ou envoies apparaîtront ici." : nil)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(showsIndicators: false) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: colonnes), spacing: 6) {
+                            ForEach(Array(whatsapp.stickers.enumerated()), id: \.element.id) { i, st in
+                                VignetteSticker(id: st.id)
+                                    .frame(height: 64)
+                                    .padding(3)
+                                    .background(RoundedRectangle(cornerRadius: 8)
+                                        .fill(i == index ? Color(red: 0.16, green: 0.44, blue: 0.86).opacity(0.18) : .clear))
+                                    .overlay(RoundedRectangle(cornerRadius: 8)
+                                        .stroke(i == index ? Color(red: 0.16, green: 0.44, blue: 0.86) : .clear, lineWidth: 2))
+                                    .id(st.id)
+                                    .onTapGesture { index = i; envoyer() }
+                            }
+                        }
+                        .padding(6)
+                        if let erreur { Text(erreur).font(.system(size: 11)).foregroundStyle(.red).padding(6) }
+                    }
+                    .onChange(of: index) { _, i in
+                        if whatsapp.stickers.indices.contains(i) {
+                            withAnimation(.linear(duration: 0.1)) { proxy.scrollTo(whatsapp.stickers[i].id, anchor: .center) }
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+        .task {
+            await whatsapp.chargerStickers()
+            charge = true
+        }
+        .roue { g in
+            g.tour = { s in
+                let n = whatsapp.stickers.count
+                guard n > 0 else { return }
+                index = min(max(index + s, 0), n - 1)
+            }
+            g.centre = { envoyer() }
+        }
+    }
+
+    private func envoyer() {
+        guard whatsapp.stickers.indices.contains(index) else { return }
+        let id = whatsapp.stickers[index].id
+        let cible = jid
+        let store = whatsapp
+        nav.retour()
+        Task { try? await store.envoyerSticker(id, a: cible) }
+    }
+}
+
+struct VignetteSticker: View {
+    let id: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image { ImageAnimee(image: image) } else { Color.clear.overlay(ProgressView().scaleEffect(0.6)) }
+        }
+        .task(id: id) { image = await API.image("/api/whatsapp/medias/\(API.segment(id))") }
     }
 }

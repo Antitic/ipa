@@ -113,6 +113,7 @@ struct EcranIPod: View {
         case .liaisonWhatsApp: EcranLiaisonWhatsApp()
         case .conversation(let jid, let nom): EcranConversation(jid: jid, nom: nom)
         case .imageWhatsApp(let id): EcranImageWhatsApp(id: id)
+        case .stickers(let jid): EcranStickers(jid: jid)
         case .photos: MenuPhotos()
         case .camera: EcranCamera()
         case .pellicule: EcranPellicule()

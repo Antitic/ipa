@@ -6,6 +6,7 @@ enum Ecran: Hashable {
     case musique, enLecture
     case whatsapp, liaisonWhatsApp
     case conversation(jid: String, nom: String)
+    case stickers(jid: String)
     case imageWhatsApp(id: String)
     case photos, camera, pellicule
     case photo(index: Int)
@@ -23,6 +24,7 @@ enum Ecran: Hashable {
         case .whatsapp, .liaisonWhatsApp: return "WhatsApp"
         case .conversation(_, let nom): return nom
         case .imageWhatsApp: return "Photo"
+        case .stickers: return "Stickers"
         case .photos: return "Photos"
         case .camera: return "Appareil photo"
         case .pellicule: return "Pellicule"

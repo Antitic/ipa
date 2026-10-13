@@ -35,7 +35,7 @@ struct PinApp: App {
                     if connecte { whatsapp.demarrer() } else { whatsapp.arreter() }
                 }
                 .onChange(of: phase) { _, p in
-                    if p == .active, compte.connecte { whatsapp.demarrer() }
+                    if p == .active, compte.connecte { whatsapp.reconnecter() }
                 }
         }
     }

@@ -27,6 +27,11 @@ private struct StatutWA: Decodable {
     let erreur: String?
 }
 
+struct StickerWA: Decodable, Identifiable, Equatable {
+    let id: String
+    let anime: Bool
+}
+
 private struct Evenement: Decodable {
     let type: String
     let message: MessageWA?
@@ -47,7 +52,12 @@ final class WhatsAppStore: ObservableObject {
     var nonLus: Int { discussions.reduce(0) { $0 + ($1.nonLus ?? 0) } }
     var discussionOuverte: String?
 
+    @Published private(set) var stickers: [StickerWA] = []
+
     private var flux: Task<Void, Never>?
+    private var surveillance: Task<Void, Never>?
+    /// Dernière ligne reçue du flux (le serveur envoie un battement toutes les 25 s).
+    private var derniereActivite = Date()
 
     func demarrer() {
         Task {
@@ -55,7 +65,35 @@ final class WhatsAppStore: ObservableObject {
             await rafraichirDiscussions()
         }
         guard flux == nil else { return }
+        lancerFlux()
+        // Un flux silencieux depuis 40 s est mort (iPhone verrouillé, réseau
+        // changé…) : on le relance au lieu d'attendre qu'iOS le remarque.
+        surveillance = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self else { return }
+                if Date().timeIntervalSince(self.derniereActivite) > 40 { self.reconnecter() }
+            }
+        }
+    }
+
+    /// Retour au premier plan : le flux ouvert avant la mise en veille est
+    /// presque toujours mort. On le rouvre tout de suite et on rattrape.
+    func reconnecter() {
+        guard flux != nil else { demarrer(); return }
+        flux?.cancel()
+        lancerFlux()
+        Task {
+            await rafraichirStatut()
+            await rafraichirDiscussions()
+            if let jid = discussionOuverte { await chargerMessages(jid) }
+        }
+    }
+
+    private func lancerFlux() {
+        derniereActivite = Date()
         flux = Task { [weak self] in
+            var attente: Double = 0.5
             while !Task.isCancelled {
                 do {
                     var req = URLRequest(url: API.url("/api/whatsapp/flux"))
@@ -63,13 +101,19 @@ final class WhatsAppStore: ObservableObject {
                     req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
                     let (octets, rep) = try await API.session.bytes(for: req)
                     guard (rep as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+                    attente = 0.5
+                    self?.derniereActivite = Date()
                     for try await ligne in octets.lines {
+                        if Task.isCancelled { return }
+                        self?.derniereActivite = Date()
                         guard ligne.hasPrefix("data: "), let d = ligne.dropFirst(6).data(using: .utf8),
                               let e = try? API.decodeur.decode(Evenement.self, from: d) else { continue }
                         self?.recevoir(e)
                     }
                 } catch {}
-                try? await Task.sleep(for: .seconds(4))
+                if Task.isCancelled { return }
+                try? await Task.sleep(for: .seconds(attente))
+                attente = min(attente * 2, 8)
             }
         }
     }
@@ -77,6 +121,8 @@ final class WhatsAppStore: ObservableObject {
     func arreter() {
         flux?.cancel()
         flux = nil
+        surveillance?.cancel()
+        surveillance = nil
         discussions = []
         messages = [:]
         lie = false
@@ -138,8 +184,27 @@ final class WhatsAppStore: ObservableObject {
         return (messages[jid]?.count ?? 0) - avant
     }
 
+    /// Le message s'affiche tout de suite (avec une horloge), sans attendre
+    /// que WhatsApp confirme, ce qui prend souvent plus d'une seconde.
     func envoyerTexte(_ texte: String, a jid: String) async throws {
+        let provisoire = MessageWA(id: "envoi-\(UUID().uuidString)", jid: jid, deMoi: true, auteur: nil,
+                                   type: "texte", texte: texte, duree: nil, timestamp: Date().timeIntervalSince1970 * 1000)
+        ajouter([provisoire], a: jid)
+        defer { messages[jid]?.removeAll { $0.id == provisoire.id } }
         let data = try await API.requete("/api/whatsapp/discussions/\(API.segment(jid))/messages", methode: "POST", json: ["texte": texte])
+        if let m = try? API.decodeur.decode(MessageWA.self, from: data) { ajouter([m], a: jid) }
+    }
+
+    func chargerStickers() async {
+        if let s = try? await API.get("/api/whatsapp/stickers", [StickerWA].self) { stickers = s }
+    }
+
+    func envoyerSticker(_ id: String, a jid: String) async throws {
+        let provisoire = MessageWA(id: "envoi-\(UUID().uuidString)", jid: jid, deMoi: true, auteur: nil,
+                                   type: "sticker-local:\(id)", texte: nil, duree: nil, timestamp: Date().timeIntervalSince1970 * 1000)
+        ajouter([provisoire], a: jid)
+        defer { messages[jid]?.removeAll { $0.id == provisoire.id } }
+        let data = try await API.requete("/api/whatsapp/discussions/\(API.segment(jid))/sticker", methode: "POST", json: ["id": id])
         if let m = try? API.decodeur.decode(MessageWA.self, from: data) { ajouter([m], a: jid) }
     }
 

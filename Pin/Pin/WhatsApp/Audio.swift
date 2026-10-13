@@ -78,11 +78,16 @@ final class Enregistreur: ObservableObject {
     }
 }
 
-/// Lit les vocaux WhatsApp (téléchargés en M4A depuis le serveur).
+/// Lit les vocaux et les fichiers audio WhatsApp (en M4A depuis le serveur).
 @MainActor
 final class LecteurVocal: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var enCours: String?
+    @Published private(set) var chargement: String?
+    /// Avancement de la lecture, de 0 à 1.
+    @Published private(set) var progression: Double = 0
+    @Published private(set) var position: Double = 0
     private var player: AVAudioPlayer?
+    private var minuteur: Timer?
 
     func basculer(_ id: String) {
         if enCours == id {
@@ -91,29 +96,51 @@ final class LecteurVocal: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
         arreter()
         enCours = id
+        chargement = id
         Task {
-            guard let data = try? await API.donnees("/api/whatsapp/medias/\(API.segment(id))"),
-                  enCours == id else { enCours = nil; return }
+            let data = try? await API.donnees("/api/whatsapp/medias/\(API.segment(id))")
+            if chargement == id { chargement = nil }
+            guard let data, enCours == id else { if enCours == id { enCours = nil }; return }
             SessionAudio.lecture()
             do {
                 let p = try AVAudioPlayer(data: data)
                 p.delegate = self
                 p.play()
                 player = p
+                minuteur = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, let p = self.player, p.duration > 0 else { return }
+                        self.position = p.currentTime
+                        self.progression = p.currentTime / p.duration
+                    }
+                }
             } catch {
                 enCours = nil
             }
         }
     }
 
+    /// Avance ou recule de quelques secondes (molette pendant la lecture).
+    func deplacer(_ secondes: Double) {
+        guard let p = player else { return }
+        p.currentTime = min(max(p.currentTime + secondes, 0), max(p.duration - 0.2, 0))
+        position = p.currentTime
+        progression = p.duration > 0 ? p.currentTime / p.duration : 0
+    }
+
     func arreter() {
         player?.stop()
         player = nil
+        minuteur?.invalidate()
+        minuteur = nil
         enCours = nil
+        chargement = nil
+        progression = 0
+        position = 0
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in self.enCours = nil }
+        Task { @MainActor in self.arreter() }
     }
 }
 
