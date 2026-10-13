@@ -53,9 +53,13 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     override init() {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        // On s'annonce comme le Safari de la vraie version d'iOS : une version
+        // inventée ne correspond pas au moteur réel et la protection anti-robots
+        // de claude.ai refuse alors d'envoyer le lien de connexion.
+        let v = UIDevice.current.systemVersion.split(separator: ".").prefix(2).joined(separator: ".")
+        config.applicationNameForUserAgent = "Version/\(v) Mobile/15E148 Safari/604.1"
         web = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 600), configuration: config)
         super.init()
-        web.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1"
         web.navigationDelegate = self
         web.configuration.userContentController.add(RelaisMessages(self), contentWorld: .page, name: "pin")
         web.configuration.userContentController.add(RelaisMessages(self), contentWorld: .page, name: "pinFocus")
@@ -119,11 +123,17 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
                 w.evaluateJavaScript("""
                 (function () {
                   var el = document.activeElement; if (!el) return;
+                  // Un seul envoi : par le formulaire s'il existe (comme Entrée sur
+                  // un vrai clavier), sinon par une touche Entrée simulée.
+                  if (el.form) {
+                    var b = el.form.querySelector('button[type=submit]:not([disabled])');
+                    if (b) { b.click(); } else if (el.form.requestSubmit) { el.form.requestSubmit(); }
+                    return;
+                  }
                   var o = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
-                  var libre = el.dispatchEvent(new KeyboardEvent('keydown', o));
+                  el.dispatchEvent(new KeyboardEvent('keydown', o));
                   el.dispatchEvent(new KeyboardEvent('keypress', o));
                   el.dispatchEvent(new KeyboardEvent('keyup', o));
-                  if (libre && el.form) { el.form.requestSubmit ? el.form.requestSubmit() : el.form.submit(); }
                 })();
                 """, completionHandler: nil)
             },
