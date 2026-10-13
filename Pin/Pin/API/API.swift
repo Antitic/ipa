@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import ImageIO
 
 /// Erreur renvoyée par le serveur Pin (champ `error` du JSON) ou par le réseau.
 struct ErreurPin: LocalizedError {
@@ -67,19 +68,55 @@ enum API {
         try decodeur.decode(T.self, from: try await requete(chemin, methode: "POST", json: json))
     }
 
-    /// Données binaires (images, audio), avec un petit cache mémoire.
+    /// Données binaires (images, audio) : cache mémoire, puis cache disque
+    /// (les médias ne changent jamais, ils s'ouvrent ensuite instantanément).
     private static let cache = NSCache<NSString, NSData>()
+    private static let dossierCache: URL = {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("medias", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }()
+
+    private static func fichierCache(_ chemin: String) -> URL {
+        let nom = chemin.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? String($0) : "_" }.joined()
+        return dossierCache.appendingPathComponent(String(nom.suffix(180)))
+    }
 
     static func donnees(_ chemin: String) async throws -> Data {
         if let d = cache.object(forKey: chemin as NSString) { return d as Data }
+        let fichier = fichierCache(chemin)
+        if let d = try? Data(contentsOf: fichier) {
+            cache.setObject(d as NSData, forKey: chemin as NSString)
+            return d
+        }
         let d = try await requete(chemin, delai: 120)
         cache.setObject(d as NSData, forKey: chemin as NSString)
+        try? d.write(to: fichier, options: .atomic)
         return d
     }
 
+    /// Image décodée hors du fil principal, prête à afficher. Les GIF sont animés.
     static func image(_ chemin: String) async -> UIImage? {
         guard let d = try? await donnees(chemin) else { return nil }
-        return UIImage(data: d)
+        return await Task.detached(priority: .userInitiated) { decoder(d) }.value
+    }
+
+    static func decoder(_ d: Data) -> UIImage? {
+        if let source = CGImageSourceCreateWithData(d as CFData, nil), CGImageSourceGetCount(source) > 1 {
+            var images: [UIImage] = []
+            var duree: Double = 0
+            for i in 0..<CGImageSourceGetCount(source) {
+                guard let cg = CGImageSourceCreateImageAtIndex(source, i, nil) else { continue }
+                let props = CGImageSourceCopyPropertiesAtIndex(source, i, nil) as? [CFString: Any]
+                let gif = props?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+                let delai = (gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double)
+                    ?? (gif?[kCGImagePropertyGIFDelayTime] as? Double) ?? 0.1
+                duree += delai < 0.02 ? 0.1 : delai
+                images.append(UIImage(cgImage: cg))
+            }
+            return UIImage.animatedImage(with: images, duration: duree)
+        }
+        return UIImage(data: d)?.preparingForDisplay()
     }
 }
 

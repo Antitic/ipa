@@ -331,11 +331,12 @@ struct Bulle: View {
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(message.deMoi ? Color(red: 0.86, green: 0.97, blue: 0.78) : .white)
+                    .fill(message.type == "sticker" ? Color.clear : (message.deMoi ? Color(red: 0.86, green: 0.97, blue: 0.78) : .white))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(selectionne ? Color(red: 0.16, green: 0.44, blue: 0.86) : Color(white: 0.85), lineWidth: selectionne ? 2 : 0.5)
+                    .stroke(selectionne ? Color(red: 0.16, green: 0.44, blue: 0.86) : (message.type == "sticker" ? Color.clear : Color(white: 0.85)),
+                            lineWidth: selectionne ? 2 : 0.5)
             )
             if !message.deMoi { Spacer(minLength: 36) }
         }
@@ -354,8 +355,18 @@ struct Bulle: View {
             }
             .frame(width: 140, height: 110)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .task { image = await API.image("/api/whatsapp/medias/\(API.segment(message.id))") }
+            .task { image = await API.image("/api/whatsapp/medias/\(API.segment(message.id))?taille=vignette") }
             if let t = message.texte { Text(t).font(.system(size: 13)) }
+        case "sticker":
+            Group {
+                if let image {
+                    ImageAnimee(image: image)
+                } else {
+                    Color.clear.overlay(ProgressView().scaleEffect(0.7))
+                }
+            }
+            .frame(width: 96, height: 96)
+            .task { image = await API.image("/api/whatsapp/medias/\(API.segment(message.id))") }
         case "vocal":
             HStack(spacing: 6) {
                 Image(systemName: enLecture ? "pause.circle.fill" : "play.circle.fill")
@@ -367,6 +378,26 @@ struct Bulle: View {
             }
         default:
             Text(message.texte ?? "").font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Image qui joue son animation (UIImage animée : stickers animés).
+struct ImageAnimee: UIViewRepresentable {
+    let image: UIImage
+
+    func makeUIView(context: Context) -> UIImageView {
+        let v = UIImageView()
+        v.contentMode = .scaleAspectFit
+        v.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        v.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        return v
+    }
+
+    func updateUIView(_ v: UIImageView, context: Context) {
+        if v.image !== image {
+            v.image = image
+            if image.images != nil { v.startAnimating() }
         }
     }
 }
