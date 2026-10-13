@@ -16,6 +16,10 @@ enum Ecran: Hashable {
     case discussionClaude(uuid: String, nom: String)
     case connexionClaude
     case reglages, connexion, telegram
+    case mail
+    case boiteMail(path: String, nom: String)
+    case lettreMail(box: String, uid: Int)
+    case ecrireMail(reponse: ReponseMail?)
 
     var titre: String {
         switch self {
@@ -39,6 +43,10 @@ enum Ecran: Hashable {
         case .reglages: return "Réglages"
         case .connexion: return "Compte Pin"
         case .telegram: return "Telegram"
+        case .mail: return "Mail"
+        case .boiteMail(_, let nom): return nom.isEmpty ? "Mail" : nom
+        case .lettreMail: return "Lettre"
+        case .ecrireMail(let r): return r == nil ? "Nouveau message" : "Réponse"
         }
     }
 }

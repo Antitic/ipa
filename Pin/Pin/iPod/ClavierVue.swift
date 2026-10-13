@@ -559,7 +559,7 @@ struct VueTouche: View {
         let recents = clavier.emojisRecents.isEmpty ? 0 : 1
         if clavier.pageEmoji < recents { return "Récents" }
         let i = clavier.pageEmoji - recents
-        return Clavier.pagesEmojis.indices.contains(i) ? Clavier.pagesEmojis[i].nom : 
+        return Clavier.pagesEmojis.indices.contains(i) ? Clavier.pagesEmojis[i].nom : ""
     }
 
     /// La bulle de la lettre au-dessus du doigt, ou la rangée d'accents.

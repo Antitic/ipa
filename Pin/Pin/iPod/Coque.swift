@@ -127,6 +127,10 @@ struct EcranIPod: View {
         case .reglages: EcranReglages()
         case .connexion: EcranConnexion()
         case .telegram: EcranTelegram()
+        case .mail: EcranMail()
+        case .boiteMail(let path, _): EcranBoiteMail(path: path)
+        case .lettreMail(let box, let uid): EcranLettreMail(box: box, uid: uid)
+        case .ecrireMail(let r): EcranEcrireMail(reponse: r)
         }
     }
 }

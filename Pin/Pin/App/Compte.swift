@@ -26,10 +26,15 @@ final class Compte: ObservableObject {
     func connexion(email: String, motDePasse: String) async throws {
         let moi = try await API.post("/api/auth/login", ["email": email, "password": motDePasse], Moi.self)
         self.email = moi.email
+        // Même mot de passe que le courrier (Meyl) : on le garde pour Mail.
+        Courrier.enregistrer(motDePasse: motDePasse)
+        Courrier.partage.configurer(email: moi.email)
     }
 
     func deconnexion() async {
         _ = try? await API.requete("/api/auth/logout", methode: "POST", json: [:])
         email = nil
+        Courrier.enregistrer(motDePasse: nil)
+        Courrier.partage.configurer(email: nil)
     }
 }

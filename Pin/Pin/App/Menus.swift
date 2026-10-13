@@ -5,11 +5,14 @@ struct MenuPrincipal: View {
     @EnvironmentObject var lecteur: Lecteur
     @EnvironmentObject var whatsapp: WhatsAppStore
     @ObservedObject private var maj = MiseAJour.partage
+    @ObservedObject private var courrier = Courrier.partage
+    @EnvironmentObject var compte: Compte
 
     var body: some View {
         var elements = [
             ElementListe(id: "musique", titre: "Musique"),
             ElementListe(id: "whatsapp", titre: "WhatsApp", badge: whatsapp.nonLus > 0 ? "\(whatsapp.nonLus)" : nil),
+            ElementListe(id: "mail", titre: "Mail", badge: courrier.nonLus > 0 ? "\(courrier.nonLus)" : nil),
             ElementListe(id: "photos", titre: "Photos"),
             ElementListe(id: "claude", titre: "Claude"),
             ElementListe(id: "reglages", titre: "Réglages"),
@@ -27,10 +30,15 @@ struct MenuPrincipal: View {
             case "musique": nav.ouvrir(.musique)
             case "whatsapp": nav.ouvrir(.whatsapp)
             case "photos": nav.ouvrir(.photos)
+            case "mail": nav.ouvrir(.mail)
             case "claude": nav.ouvrir(.claude)
             case "reglages": nav.ouvrir(.reglages)
             default: nav.ouvrir(.enLecture)
             }
+        }
+        .task {
+            courrier.configurer(email: compte.email)
+            await courrier.rafraichir()
         }
     }
 }
