@@ -381,7 +381,12 @@ struct Bulle: View {
             }
             .frame(width: 96, height: 96)
             .opacity(envoiEnCours ? 0.6 : 1)
-            .task(id: id) { image = await API.image("/api/whatsapp/medias/\(API.segment(id))") }
+            .task(id: id) {
+                let chemin = message.type == "sticker"
+                    ? "/api/whatsapp/medias/\(API.segment(id))"
+                    : "/api/whatsapp/stickers/\(API.segment(id))/image"
+                image = await API.image(chemin)
+            }
         } else {
             contenuSimple
         }
@@ -556,7 +561,7 @@ struct EcranStickers: View {
         Group {
             if whatsapp.stickers.isEmpty {
                 MessageEcran(icone: "face.smiling", texte: charge ? "Aucun sticker" : "Chargement…",
-                             detail: charge ? "Les stickers que tu reçois ou envoies apparaîtront ici." : nil)
+                             detail: charge ? "Tes stickers favoris WhatsApp et ceux que tu reçois apparaîtront ici." : nil)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(showsIndicators: false) {
@@ -617,6 +622,6 @@ struct VignetteSticker: View {
         Group {
             if let image { ImageAnimee(image: image) } else { Color.clear.overlay(ProgressView().scaleEffect(0.6)) }
         }
-        .task(id: id) { image = await API.image("/api/whatsapp/medias/\(API.segment(id))") }
+        .task(id: id) { image = await API.image("/api/whatsapp/stickers/\(API.segment(id))/image") }
     }
 }
