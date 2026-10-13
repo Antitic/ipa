@@ -4,6 +4,7 @@ struct MenuPrincipal: View {
     @EnvironmentObject var nav: Navigateur
     @EnvironmentObject var lecteur: Lecteur
     @EnvironmentObject var whatsapp: WhatsAppStore
+    @ObservedObject private var maj = MiseAJour.partage
 
     var body: some View {
         var elements = [
@@ -16,8 +17,13 @@ struct MenuPrincipal: View {
         if lecteur.courant != nil {
             elements.append(ElementListe(id: "enlecture", titre: "En lecture"))
         }
+        if let v = maj.disponible {
+            // Toujours en tête : un appui sur le centre et c'est installé.
+            elements.insert(ElementListe(id: "maj", titre: "Mettre à jour Pin", badge: v.numero), at: 0)
+        }
         return EcranListe(cle: .menu, elements: elements) { e in
             switch e.id {
+            case "maj": maj.installer()
             case "musique": nav.ouvrir(.musique)
             case "whatsapp": nav.ouvrir(.whatsapp)
             case "photos": nav.ouvrir(.photos)
@@ -51,6 +57,14 @@ struct EcranReglages: View {
     @AppStorage("clics") private var clics = true
     @State private var telegramLie: Bool?
     @State private var confirmation: String?
+    @ObservedObject private var maj = MiseAJour.partage
+
+    private var detailVersion: String {
+        if maj.verification { return "\(MiseAJour.actuelle) · vérification…" }
+        if let v = maj.disponible { return "\(MiseAJour.actuelle) → \(v.numero) : installer" }
+        if maj.derniereErreur != nil { return "\(MiseAJour.actuelle) · hors ligne" }
+        return "\(MiseAJour.actuelle) · à jour"
+    }
 
     private var detailWhatsApp: String {
         guard compte.connecte else { return "Compte Pin requis" }
@@ -69,6 +83,7 @@ struct EcranReglages: View {
 
     var body: some View {
         let elements: [ElementListe] = [
+            ElementListe(id: "version", titre: "Version", detail: detailVersion, chevron: false),
             ElementListe(id: "compte", titre: "Compte Pin", detail: compte.email ?? "Non connecté"),
             ElementListe(id: "whatsapp", titre: "WhatsApp", detail: detailWhatsApp),
             ElementListe(id: "telegram", titre: "Telegram (musique)", detail: detailTelegram),
@@ -78,6 +93,8 @@ struct EcranReglages: View {
         ]
         EcranListe(cle: .reglages, elements: elements) { e in
             switch e.id {
+            case "version":
+                if maj.disponible != nil { maj.installer() } else { Task { await maj.verifier(forcer: true) } }
             case "compte": nav.ouvrir(.connexion)
             case "whatsapp": if compte.connecte { nav.ouvrir(.liaisonWhatsApp) } else { nav.ouvrir(.connexion) }
             case "telegram": if compte.connecte { nav.ouvrir(.telegram) } else { nav.ouvrir(.connexion) }
@@ -89,6 +106,7 @@ struct EcranReglages: View {
             }
         }
         .task {
+            Task { await maj.verifier(forcer: true) }
             guard compte.connecte else { return }
             await whatsapp.rafraichirStatut()
             telegramLie = (try? await API.get("/api/telegram/statut", StatutTelegram.self))?.lie

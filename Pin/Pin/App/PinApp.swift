@@ -27,6 +27,7 @@ struct PinApp: App {
                 .preferredColorScheme(.light)
                 .statusBarHidden(true)
                 .task { await compte.verifier() }
+                .task { await MiseAJour.partage.verifier(forcer: true) }
                 .task {
                     ClaudeWeb.partage.clavier = clavier
                     ClaudeWeb.partage.demarrer()
@@ -35,6 +36,7 @@ struct PinApp: App {
                     if connecte { whatsapp.demarrer() } else { whatsapp.arreter() }
                 }
                 .onChange(of: phase) { _, p in
+                    if p == .active { Task { await MiseAJour.partage.verifier() } }
                     if p == .active, compte.connecte { whatsapp.reconnecter() }
                 }
         }
