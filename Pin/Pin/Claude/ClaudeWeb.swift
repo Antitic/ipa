@@ -37,6 +37,9 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     let web: WKWebView
     @Published private(set) var etat: Etat = .chargement
     @Published private(set) var conversations: [ConversationClaude] = []
+    /// Dernière version connue de chaque discussion : elle s'affiche tout de
+    /// suite à l'ouverture, pendant que la version à jour arrive.
+    private(set) var memoire: [String: (messages: [MessageClaude], feuille: String?)] = [:]
 
     private var organisation: String?
     private var flux: [String: (String) -> Void] = [:]
@@ -240,7 +243,7 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
         let json = corps.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         let script = """
         const r = await fetch(chemin, {
-          method: methode, credentials: 'include',
+          method: methode, credentials: 'include', cache: 'no-store',
           headers: { 'content-type': 'application/json', 'accept': 'application/json' },
           body: corps === '' ? undefined : corps
         });
@@ -306,14 +309,20 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
             guard let id = m["uuid"] as? String else { return nil }
             let humain = (m["sender"] as? String) == "human"
             var texte = (m["text"] as? String) ?? ""
-            if texte.isEmpty, let blocs = m["content"] as? [[String: Any]] {
-                texte = blocs.filter { ($0["type"] as? String) == "text" }
+            // Le contenu détaillé est la version complète (plusieurs blocs de
+            // texte quand Claude a utilisé des outils) : on le préfère.
+            if let blocs = m["content"] as? [[String: Any]] {
+                let complet = blocs.filter { ($0["type"] as? String) == "text" }
                     .compactMap { $0["text"] as? String }
+                    .filter { !$0.isEmpty }
                     .joined(separator: "\n\n")
+                if complet.count >= texte.count { texte = complet }
             }
             return MessageClaude(id: id, humain: humain, texte: texte)
         }
-        return (resultat, chemin.last?["uuid"] as? String)
+        let r2 = (resultat, chemin.last?["uuid"] as? String)
+        memoire[uuid] = r2
+        return r2
     }
 
     /// Crée une discussion vide et rend son identifiant.

@@ -135,6 +135,7 @@ struct EcranConversation: View {
                                     etat.index = i
                                     activer(m)
                                 }
+                                .contextMenu { menuMessage(m) }
                         }
                     }
                     .padding(6)
@@ -223,6 +224,32 @@ struct EcranConversation: View {
     }
 
     // MARK: - Actions
+
+    static let emojis = ["❤️", "👍", "😂", "😮", "😢", "🙏"]
+
+    @ViewBuilder
+    private func menuMessage(_ m: MessageWA) -> some View {
+        if !m.id.hasPrefix("envoi-") {
+            let mienne = m.reactions?.first(where: \.moi)?.emoji
+            ForEach(Self.emojis, id: \.self) { e in
+                Button(mienne == e ? "\(e)  (retirer)" : e) {
+                    Task { await whatsapp.reagir(mienne == e ? "" : e, a: m.id, dans: jid) }
+                }
+            }
+            if m.deMoi {
+                Divider()
+                Button { nav.ouvrir(.vuPar(id: m.id)) } label: {
+                    Label("Vu par…", systemImage: "eye")
+                }
+            }
+            if m.type == "vocal" || m.type == "audio" {
+                Divider()
+                Button { Transcripteur.partage.transcrire(m.id) } label: {
+                    Label("Transcrire en texte", systemImage: "text.quote")
+                }
+            }
+        }
+    }
 
     private func ouvrirClavier() {
         clavier.ouvrir(champ: idSaisie, texte: $etat.texte, type: .texte, libelleRetour: "envoyer") { envoyerTexte() }
@@ -326,6 +353,7 @@ struct Bulle: View {
     var progression: Double = 0
     var position: Double = 0
     @State private var image: UIImage?
+    @ObservedObject private var transcripteur = Transcripteur.partage
 
     private var envoiEnCours: Bool { message.id.hasPrefix("envoi-") }
     /// Un sticker en cours d'envoi s'affiche avec l'image du sticker choisi.
@@ -343,13 +371,11 @@ struct Bulle: View {
                     Text(a).font(.system(size: 10, weight: .bold)).foregroundStyle(Color(red: 0.1, green: 0.5, blue: 0.4))
                 }
                 contenu
+                if message.type == "vocal" || message.type == "audio" { transcription }
                 HStack(spacing: 3) {
                     Spacer(minLength: 0)
                     Text(Date(timeIntervalSince1970: message.timestamp / 1000), format: .dateTime.hour().minute())
-                    if message.deMoi {
-                        Image(systemName: envoiEnCours ? "clock" : "checkmark")
-                            .font(.system(size: 8, weight: .semibold))
-                    }
+                    if message.deMoi { coches }
                 }
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
@@ -366,6 +392,74 @@ struct Bulle: View {
                             lineWidth: selectionne ? 2 : 0.5)
             )
             if !message.deMoi { Spacer(minLength: 36) }
+        }
+        .overlay(alignment: message.deMoi ? .bottomTrailing : .bottomLeading) {
+            if let r = message.reactions, !r.isEmpty {
+                pastilleReactions(r)
+                    .offset(x: message.deMoi ? -10 : 10, y: 12)
+            }
+        }
+        .padding(.bottom, (message.reactions?.isEmpty ?? true) ? 0 : 12)
+    }
+
+    /// ✓ envoyé · ✓✓ gris reçu · ✓✓ bleu lu (ou écouté) — comme WhatsApp.
+    @ViewBuilder
+    private var coches: some View {
+        if envoiEnCours {
+            Image(systemName: "clock").font(.system(size: 8, weight: .semibold))
+        } else {
+            let n = message.vu?.niveau ?? 1
+            HStack(spacing: -4) {
+                Image(systemName: "checkmark")
+                if n >= 2 { Image(systemName: "checkmark") }
+            }
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(n >= 3 ? Color(red: 0.2, green: 0.6, blue: 0.95) : Color.secondary)
+            if let v = message.vu, v.total > 1, v.lus > 0, v.lus < v.total {
+                Text("\(v.lus)/\(v.total)").font(.system(size: 8)).foregroundStyle(Color(red: 0.2, green: 0.6, blue: 0.95))
+            }
+        }
+    }
+
+    /// Comme WhatsApp : les emojis distincts, et le total s'il y en a plusieurs.
+    private func pastilleReactions(_ r: [ReactionWA]) -> some View {
+        var vus: [String] = []
+        for x in r where !vus.contains(x.emoji) { vus.append(x.emoji) }
+        return HStack(spacing: 1) {
+            Text(vus.prefix(3).joined()).font(.system(size: 12))
+            if r.count > 1 { Text("\(r.count)").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary) }
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.white))
+        .overlay(Capsule().stroke(r.contains(where: \.moi) ? Color(red: 0.16, green: 0.44, blue: 0.86) : Color(white: 0.85), lineWidth: 0.7))
+        .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+    }
+
+    /// Texte du vocal, seulement s'il a été demandé (appui long › Transcrire,
+    /// ou le bouton qui apparaît quand le vocal est sélectionné).
+    @ViewBuilder
+    private var transcription: some View {
+        if let t = transcripteur.textes[message.id] {
+            Text(t)
+                .font(.system(size: 12).italic())
+                .foregroundStyle(Color(white: 0.25))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 200, alignment: .leading)
+        } else if transcripteur.enCours.contains(message.id) {
+            HStack(spacing: 4) {
+                ProgressView().scaleEffect(0.6)
+                Text("Transcription…").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+        } else if let e = transcripteur.erreurs[message.id] {
+            Text(e).font(.system(size: 11)).foregroundStyle(.red)
+        } else if selectionne && !envoiEnCours {
+            Button { transcripteur.transcrire(message.id) } label: {
+                Label("Transcrire", systemImage: "text.quote")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(red: 0.16, green: 0.44, blue: 0.86))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -623,5 +717,67 @@ struct VignetteSticker: View {
             if let image { ImageAnimee(image: image) } else { Color.clear.overlay(ProgressView().scaleEffect(0.6)) }
         }
         .task(id: id) { image = await API.image("/api/whatsapp/stickers/\(API.segment(id))/image") }
+    }
+}
+
+
+/// Qui a reçu, lu ou écouté un de mes messages.
+struct EcranVuPar: View {
+    let id: String
+    @State private var lecteurs: [Lecteur]?
+    @State private var groupe = false
+    @State private var erreur: String?
+
+    struct Lecteur: Decodable, Identifiable {
+        let nom: String
+        let niveau: Int
+        let recuA: Double?
+        let luA: Double?
+        let ecouteA: Double?
+        var id: String { nom }
+    }
+    private struct Reponse: Decodable { let groupe: Bool; let lecteurs: [Lecteur] }
+
+    var body: some View {
+        Group {
+            if let erreur {
+                MessageEcran(icone: "exclamationmark.triangle", texte: "Infos indisponibles", detail: erreur)
+            } else if let lecteurs {
+                if lecteurs.isEmpty {
+                    MessageEcran(icone: "eye.slash", texte: "Pas encore d'accusé",
+                                 detail: "Envoyé. Rien n'indique encore qu'il a été reçu ou lu (les confirmations de lecture sont peut-être désactivées).")
+                } else {
+                    EcranListe(cle: .vuPar(id: id), elements: lecteurs.map(ligne)) { _ in }
+                }
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            do {
+                let r = try await API.get("/api/whatsapp/messages/\(API.segment(id))/vu", Reponse.self)
+                groupe = r.groupe
+                lecteurs = r.lecteurs
+            } catch {
+                erreur = error.localizedDescription
+            }
+        }
+    }
+
+    private func ligne(_ l: Lecteur) -> ElementListe {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.doesRelativeDateFormatting = true
+        f.dateStyle = .short
+        f.timeStyle = .short
+        func heure(_ t: Double?) -> String { t.map { f.string(from: Date(timeIntervalSince1970: $0 / 1000)) } ?? "" }
+        let detail: String
+        switch l.niveau {
+        case 4...: detail = "Écouté " + heure(l.ecouteA ?? l.luA)
+        case 3: detail = "Lu " + heure(l.luA)
+        default: detail = "Reçu " + heure(l.recuA)
+        }
+        return ElementListe(id: l.nom, titre: l.nom, detail: detail.trimmingCharacters(in: .whitespaces),
+                            badge: l.niveau >= 3 ? "✓✓" : nil, chevron: false)
     }
 }

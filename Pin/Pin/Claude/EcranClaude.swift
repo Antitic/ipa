@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 
 /// La liste de tes discussions claude.ai, façon iPod.
@@ -49,7 +50,13 @@ struct EcranClaude: View {
             }
         }
         .task(id: claude.etat) {
-            if claude.etat == .pret { await charger() }
+            guard claude.etat == .pret else { return }
+            await charger()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(8))
+                if Task.isCancelled { break }
+                try? await claude.chargerConversations()
+            }
         }
     }
 
@@ -124,7 +131,15 @@ struct EcranDiscussionClaude: View {
         }
         .task {
             etat.uuid = uuidDepart
+            etat.afficherMemoire()
             await etat.charger()
+            // Ce que tu écris sur claude.ai (ou un autre appareil) arrive ici en
+            // quelques secondes, sans recharger.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                if Task.isCancelled { break }
+                await etat.rafraichir()
+            }
         }
         .roue { g in
             let d = defilement
@@ -184,6 +199,24 @@ final class EtatDiscussionClaude: ObservableObject {
         let n = blocs.count
         guard n > 0 else { return }
         index = min(max(index + s, 0), n - 1)
+    }
+
+    func afficherMemoire() {
+        guard !uuid.isEmpty, messages.isEmpty, let m = ClaudeWeb.partage.memoire[uuid] else { return }
+        messages = m.messages
+        feuille = m.feuille
+        index = max(blocs.count - 1, 0)
+    }
+
+    /// Relecture discrète : ne touche à rien si rien n'a changé ou si un envoi est en cours.
+    func rafraichir() async {
+        guard !uuid.isEmpty, !envoi, UIApplication.shared.applicationState == .active else { return }
+        guard let r = try? await ClaudeWeb.partage.messages(uuid), !envoi else { return }
+        if r.messages != messages || r.feuille != feuille {
+            messages = r.messages
+            feuille = r.feuille
+            erreur = nil
+        }
     }
 
     func charger() async {

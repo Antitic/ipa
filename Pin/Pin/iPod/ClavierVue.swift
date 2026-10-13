@@ -5,12 +5,16 @@ import UIKit
 
 enum Touche: Hashable {
     case car(String)
+    case emoji(String)
+    case pageEmoji(Int)
     case maj, effacer, espace, retour, fermer
     case couche(Clavier.Couche, String)
 
     var largeur: CGFloat {
         switch self {
         case .car: return 1
+        case .emoji: return 1.25
+        case .pageEmoji: return 1.35
         case .maj, .effacer: return 1.35
         case .couche: return 1.35
         case .fermer: return 1.1
@@ -27,7 +31,7 @@ enum Touche: Hashable {
 
     var speciale: Bool {
         switch self {
-        case .car, .espace: return false
+        case .car, .espace, .emoji: return false
         default: return true
         }
     }
@@ -81,6 +85,7 @@ struct ClavierIPod: View {
             .onChange(of: g.size) { _, _ in saisie.configurer(clavier: clavier, places: placer(dans: g.size)) }
             .onChange(of: clavier.couche) { _, _ in saisie.configurer(clavier: clavier, places: placer(dans: g.size)) }
             .onChange(of: clavier.type) { _, _ in saisie.configurer(clavier: clavier, places: placer(dans: g.size)) }
+            .onChange(of: clavier.pageEmoji) { _, _ in saisie.configurer(clavier: clavier, places: placer(dans: g.size)) }
         }
         .padding(.horizontal, 3)
         .padding(.top, 14)
@@ -145,7 +150,7 @@ struct ClavierIPod: View {
         case .lettres:
             let bas: [Touche] = clavier.type == .email
                 ? [.couche(.chiffres, "123"), .fermer, .car("@"), .espace, .car("."), .retour]
-                : [.couche(.chiffres, "123"), .fermer, .espace, .retour]
+                : [.couche(.chiffres, "123"), .couche(.emojis, "😀"), .fermer, .espace, .retour]
             return [
                 "azertyuiop".map { .car(String($0)) },
                 "qsdfghjklm".map { .car(String($0)) },
@@ -157,8 +162,16 @@ struct ClavierIPod: View {
                 "1234567890".map { .car(String($0)) },
                 ["-", "/", ":", ";", "(", ")", "€", "&", "@", "\""].map { .car($0) },
                 [.couche(.symboles, "#+=")] + [".", ",", "?", "!", "'"].map { .car($0) } + [.effacer],
-                [.couche(.lettres, "ABC"), .fermer, .espace, .retour],
+                [.couche(.lettres, "ABC"), .couche(.emojis, "😀"), .fermer, .espace, .retour],
             ]
+        case .emojis:
+            let pages = clavier.pagesEmojis
+            let page = pages[min(clavier.pageEmoji, pages.count - 1)]
+            var rangees: [[Touche]] = stride(from: 0, to: 24, by: 8).map { i in
+                Array(page.dropFirst(i).prefix(8)).map { .emoji($0) }
+            }
+            rangees = rangees.filter { !$0.isEmpty }
+            return rangees + [[.couche(.lettres, "ABC"), .pageEmoji(-1), .espace, .pageEmoji(1), .effacer]]
         case .symboles:
             return [
                 ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="].map { .car($0) },
@@ -351,6 +364,8 @@ final class SaisieTactile: ObservableObject {
                     try? await Task.sleep(for: .milliseconds(n > 20 ? 45 : 85))
                 }
             }
+        case .emoji:
+            Son.touche()
         case .car(let c):
             Son.touche()
             programmerAccents(cle, id: id, c)
@@ -385,7 +400,11 @@ final class SaisieTactile: ObservableObject {
         case .espace: clavier.espace()
         case .retour: clavier.valider()
         case .fermer: clavier.fermer()
-        case .couche(let c, _): clavier.couche = c
+        case .couche(let c, _):
+            if c == .emojis { clavier.pageEmoji = 0 }
+            clavier.couche = c
+        case .emoji(let e): clavier.taperEmoji(e)
+        case .pageEmoji(let sens): clavier.changerPageEmoji(sens)
         case .effacer: break
         }
     }
@@ -523,8 +542,24 @@ struct VueTouche: View {
                 .font(.system(size: 16))
                 .foregroundStyle(.black)
         case .couche(_, let libelle):
-            Text(libelle).font(.system(size: 15)).foregroundStyle(.black)
+            Text(libelle).font(.system(size: libelle.unicodeScalars.first?.properties.isEmojiPresentation == true ? 19 : 15))
+                .foregroundStyle(.black)
+        case .emoji(let e):
+            Text(e).font(.system(size: 26))
+        case .pageEmoji(let sens):
+            VStack(spacing: 0) {
+                Image(systemName: sens < 0 ? "chevron.left" : "chevron.right").font(.system(size: 15, weight: .semibold))
+                Text(nomPage).font(.system(size: 8)).lineLimit(1).minimumScaleFactor(0.6)
+            }
+            .foregroundStyle(.black)
         }
+    }
+
+    private var nomPage: String {
+        let recents = clavier.emojisRecents.isEmpty ? 0 : 1
+        if clavier.pageEmoji < recents { return "Récents" }
+        let i = clavier.pageEmoji - recents
+        return Clavier.pagesEmojis.indices.contains(i) ? Clavier.pagesEmojis[i].nom : 
     }
 
     /// La bulle de la lettre au-dessus du doigt, ou la rangée d'accents.

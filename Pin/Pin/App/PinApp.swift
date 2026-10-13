@@ -19,6 +19,7 @@ struct PinApp: App {
     var body: some Scene {
         WindowGroup {
             Coque()
+                .modifier(ShuffleSecousse())
                 .environmentObject(nav)
                 .environmentObject(compte)
                 .environmentObject(lecteur)

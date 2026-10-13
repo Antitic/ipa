@@ -9,6 +9,15 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     private let sortie = AVCapturePhotoOutput()
     private let file = DispatchQueue(label: "pin.camera")
     private var position: AVCaptureDevice.Position = .back
+    private var appareil: AVCaptureDevice?
+    /// Facteur où la caméra virtuelle passe de l'ultra grand-angle au grand-angle :
+    /// c'est le « 1× » affiché, comme dans l'app Appareil photo.
+    private var base: CGFloat = 1
+
+    /// Zoom affiché (0,5× sur l'ultra grand-angle, 1× normal…).
+    @Published var zoomAffiche: Double = 1
+    @Published var zoomVisible = false
+    private var masquageZoom: DispatchWorkItem?
 
     @Published var message: String?
     @Published var flash = false
@@ -34,14 +43,49 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
         session.beginConfiguration()
         session.sessionPreset = .photo
         for e in session.inputs { session.removeInput(e) }
-        if let appareil = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
-           let entree = try? AVCaptureDeviceInput(device: appareil), session.canAddInput(entree) {
+        // Caméra virtuelle à l'arrière (ultra grand-angle + grand-angle [+ télé]) : le zoom
+        // passe d'un objectif à l'autre tout seul, de 0,5× au maximum.
+        let types: [AVCaptureDevice.DeviceType] = position == .back
+            ? [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera]
+            : [.builtInWideAngleCamera]
+        let choisi = types.lazy.compactMap { AVCaptureDevice.default($0, for: .video, position: self.position) }.first
+        if let choisi, let entree = try? AVCaptureDeviceInput(device: choisi), session.canAddInput(entree) {
             session.addInput(entree)
+            appareil = choisi
+            let bascules = choisi.virtualDeviceSwitchOverVideoZoomFactors.map { CGFloat(truncating: $0) }
+            // Sur une double caméra grand-angle + télé, le premier seuil est le télé : 1× reste 1.
+            base = choisi.deviceType == .builtInDualCamera ? 1 : (bascules.first ?? 1)
+            try? choisi.lockForConfiguration()
+            choisi.videoZoomFactor = min(max(base, choisi.minAvailableVideoZoomFactor), choisi.maxAvailableVideoZoomFactor)
+            choisi.unlockForConfiguration()
+            let affiche = Double(choisi.videoZoomFactor / base)
+            DispatchQueue.main.async { self.zoomAffiche = affiche }
         }
         if !session.outputs.contains(sortie), session.canAddOutput(sortie) {
             session.addOutput(sortie)
         }
         session.commitConfiguration()
+    }
+
+    /// Un cran de molette : ~7 % de zoom, en douceur.
+    func zoomer(_ crans: Int) {
+        file.async {
+            guard let a = self.appareil else { return }
+            let maxi = min(a.maxAvailableVideoZoomFactor, self.base * 15)
+            let cible = min(max(a.videoZoomFactor * pow(1.07, CGFloat(crans)), a.minAvailableVideoZoomFactor), maxi)
+            guard (try? a.lockForConfiguration()) != nil else { return }
+            a.ramp(toVideoZoomFactor: cible, withRate: 12)
+            a.unlockForConfiguration()
+            let affiche = Double(cible / self.base)
+            DispatchQueue.main.async {
+                self.zoomAffiche = affiche
+                self.zoomVisible = true
+                self.masquageZoom?.cancel()
+                let m = DispatchWorkItem { self.zoomVisible = false }
+                self.masquageZoom = m
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: m)
+            }
+        }
     }
 
     func changerCamera() {
@@ -120,7 +164,20 @@ struct EcranCamera: View {
                 ApercuCamera(session: camera.session)
             }
             Color.white.opacity(camera.flash ? 0.85 : 0).allowsHitTesting(false)
-            Text(camera.message ?? "Centre : photo · ⏮ ⏭ : caméra")
+            if camera.zoomVisible || camera.zoomAffiche != 1 {
+                Text(camera.zoomAffiche < 0.95 ? String(format: "%.1f×", camera.zoomAffiche).replacingOccurrences(of: ".", with: ",")
+                     : (camera.zoomAffiche < 9.95 ? String(format: "%.1f×", camera.zoomAffiche).replacingOccurrences(of: ".", with: ",")
+                        : String(format: "%.0f×", camera.zoomAffiche)))
+                    .font(.system(size: 12, weight: .bold).monospacedDigit())
+                    .foregroundStyle(Color.yellow)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.black.opacity(0.55)))
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 8)
+                    .animation(.easeOut(duration: 0.2), value: camera.zoomVisible)
+            }
+            Text(camera.message ?? "Molette : zoom · Centre : photo · ⏮ ⏭ : caméra")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 6)
@@ -131,6 +188,7 @@ struct EcranCamera: View {
         .onAppear { camera.demarrer() }
         .onDisappear { camera.arreter() }
         .roue { g in
+            g.tour = { s in camera.zoomer(s) }
             g.centre = { camera.declencher() }
             g.precedent = { camera.changerCamera() }
             g.suivant = { camera.changerCamera() }

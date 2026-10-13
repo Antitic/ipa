@@ -3,10 +3,11 @@ import SwiftUI
 /// Les écrans de l'iPod. Un seul est affiché : celui du haut de la pile.
 enum Ecran: Hashable {
     case menu
-    case musique, enLecture
+    case musique, enLecture, coverFlow
     case whatsapp, liaisonWhatsApp
     case conversation(jid: String, nom: String)
     case stickers(jid: String)
+    case vuPar(id: String)
     case imageWhatsApp(id: String)
     case photos, camera, pellicule
     case photo(index: Int)
@@ -20,11 +21,13 @@ enum Ecran: Hashable {
         switch self {
         case .menu: return "Pin"
         case .musique: return "Musique"
+        case .coverFlow: return "Cover Flow"
         case .enLecture: return "En lecture"
         case .whatsapp, .liaisonWhatsApp: return "WhatsApp"
         case .conversation(_, let nom): return nom
         case .imageWhatsApp: return "Photo"
         case .stickers: return "Stickers"
+        case .vuPar: return "Infos du message"
         case .photos: return "Photos"
         case .camera: return "Appareil photo"
         case .pellicule: return "Pellicule"

@@ -7,7 +7,7 @@ enum TypeClavier { case texte, email, numero, telephone }
 @MainActor
 final class Clavier: ObservableObject {
     enum Maj { case aucune, une, verrou }
-    enum Couche { case lettres, chiffres, symboles }
+    enum Couche { case lettres, chiffres, symboles, emojis }
 
     @Published private(set) var actif = false
     @Published private(set) var champ: UUID?
@@ -15,6 +15,42 @@ final class Clavier: ObservableObject {
     @Published var maj: Maj = .aucune
     @Published var couche: Couche = .lettres
     @Published private(set) var libelleRetour = "retour"
+    /// Page affichée dans la couche emojis (0 = récents).
+    @Published var pageEmoji = 0
+    @Published private(set) var emojisRecents: [String] = UserDefaults.standard.stringArray(forKey: "emojisRecents") ?? []
+
+    static let pagesEmojis: [(nom: String, emojis: [String])] = [
+        ("Smileys", ["😀","😃","😄","😁","😆","😅","😂","🤣","🥲","😊","😇","🙂","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜"]),
+        ("Émotions", ["🤪","🤨","🧐","🤓","😎","🥸","🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","😣","😖","😫","😩","🥺","😢","😭","😤","😠"]),
+        ("Émotions", ["😡","🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🫡","🤭","🤫","🤥","😶","😐","😑","😬","🙄","😯","😴"]),
+        ("Gestes", ["👍","👎","👌","🤌","✌️","🤞","🫶","🤟","🤘","🤙","👈","👉","👆","👇","☝️","✋","👋","👏","🙌","👐","🤲","🙏","💪","🫵"]),
+        ("Cœurs", ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❤️‍🔥","💕","💞","💓","💗","💖","💘","💝","💯","💥","💫","⭐️","🌟","✨"]),
+        ("Choses", ["🔥","🎉","🎊","🎁","🎂","🍕","🍔","🍟","🍿","☕️","🍺","🍷","⚽️","🏀","🎮","🎧","🎵","📱","💻","📷","🚗","✈️","🏠","💤"]),
+        ("Nature", ["🐶","🐱","🐭","🐰","🦊","🐻","🐼","🐸","🐵","🙈","🙉","🙊","🐔","🐧","🦄","🐝","🌸","🌹","🌻","🌈","☀️","🌙","⚡️","❄️"]),
+    ]
+
+    /// Les pages : les récents d'abord (s'il y en a), puis les catégories.
+    var pagesEmojis: [[String]] {
+        let recents = emojisRecents.isEmpty ? [] : [Array(emojisRecents.prefix(24))]
+        return recents + Self.pagesEmojis.map(\.emojis)
+    }
+
+    func changerPageEmoji(_ sens: Int) {
+        let n = pagesEmojis.count
+        pageEmoji = ((pageEmoji + sens) % n + n) % n
+    }
+
+    func taperEmoji(_ e: String) {
+        if let web {
+            web.inserer(e)
+        } else if let cible {
+            cible.wrappedValue += e
+        }
+        var r = emojisRecents.filter { $0 != e }
+        r.insert(e, at: 0)
+        emojisRecents = Array(r.prefix(24))
+        UserDefaults.standard.set(emojisRecents, forKey: "emojisRecents")
+    }
 
     private var cible: Binding<String>?
     private var retour: (() -> Void)?

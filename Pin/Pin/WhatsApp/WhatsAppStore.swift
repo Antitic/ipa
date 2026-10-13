@@ -9,7 +9,21 @@ struct Discussion: Codable, Identifiable, Equatable {
     var id: String { jid }
 }
 
+struct ReactionWA: Codable, Equatable, Hashable {
+    let emoji: String
+    let moi: Bool
+}
+
+/// État d'un de mes messages : 1 envoyé, 2 reçu, 3 lu, 4 écouté.
+struct VuWA: Codable, Equatable {
+    let niveau: Int
+    let lus: Int
+    let total: Int
+}
+
 struct MessageWA: Codable, Identifiable, Equatable {
+    var vu: VuWA? = nil
+    var reactions: [ReactionWA]? = nil
     let id: String
     let jid: String
     let deMoi: Bool
@@ -36,6 +50,10 @@ private struct Evenement: Decodable {
     let type: String
     let message: MessageWA?
     let lie: Bool?
+    let id: String?
+    let jid: String?
+    let reactions: [ReactionWA]?
+    let vu: VuWA?
 }
 
 /// État WhatsApp partagé : statut, discussions, messages par discussion, et le
@@ -135,6 +153,13 @@ final class WhatsAppStore: ObservableObject {
             guard let m = e.message else { return }
             ajouter([m], a: m.jid)
             Task { await rafraichirDiscussions() }
+        case "vu":
+            if let id = e.id, let jid = e.jid, var liste = messages[jid], let i = liste.firstIndex(where: { $0.id == id }) {
+                liste[i].vu = e.vu
+                messages[jid] = liste
+            }
+        case "reaction":
+            if let id = e.id, let jid = e.jid { appliquerReactions(e.reactions ?? [], a: id, dans: jid) }
         case "statut":
             lie = e.lie ?? lie
             Task { await rafraichirStatut() }
@@ -193,6 +218,26 @@ final class WhatsAppStore: ObservableObject {
         defer { messages[jid]?.removeAll { $0.id == provisoire.id } }
         let data = try await API.requete("/api/whatsapp/discussions/\(API.segment(jid))/messages", methode: "POST", json: ["texte": texte])
         if let m = try? API.decodeur.decode(MessageWA.self, from: data) { ajouter([m], a: jid) }
+    }
+
+    private func appliquerReactions(_ r: [ReactionWA], a id: String, dans jid: String) {
+        guard var liste = messages[jid], let i = liste.firstIndex(where: { $0.id == id }) else { return }
+        liste[i].reactions = r
+        messages[jid] = liste
+    }
+
+    /// Réagit à un message (emoji vide = retirer sa réaction). Affiché tout de suite.
+    func reagir(_ emoji: String, a id: String, dans jid: String) async {
+        let avant = messages[jid]?.first(where: { $0.id == id })?.reactions ?? []
+        var apres = avant.filter { !$0.moi }
+        if !emoji.isEmpty { apres.append(ReactionWA(emoji: emoji, moi: true)) }
+        appliquerReactions(apres, a: id, dans: jid)
+        struct R: Decodable { let reactions: [ReactionWA] }
+        if let r = try? await API.post("/api/whatsapp/discussions/\(API.segment(jid))/reaction", ["id": id, "emoji": emoji], R.self) {
+            appliquerReactions(r.reactions, a: id, dans: jid)
+        } else {
+            appliquerReactions(avant, a: id, dans: jid)
+        }
     }
 
     func chargerStickers() async {

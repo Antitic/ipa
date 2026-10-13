@@ -20,11 +20,18 @@ struct EcranMorceaux: View {
                 MessageEcran(icone: "exclamationmark.triangle", texte: "Musique indisponible", detail: erreur)
                     .roue { g in g.centre = { Task { await charger() } } }
             } else if let morceaux {
-                let aleatoire: [ElementListe] = morceaux.isEmpty ? [] : [ElementListe(id: "__aleatoire", titre: "Lecture aléatoire", chevron: false)]
+                let aleatoire: [ElementListe] = morceaux.isEmpty ? [] : [
+                    ElementListe(id: "__coverflow", titre: "Cover Flow"),
+                    ElementListe(id: "__aleatoire", titre: "Lecture aléatoire", detail: "ou secoue l'iPhone", chevron: false),
+                ]
                 let pistes: [ElementListe] = morceaux.map { ElementListe(id: $0.id, titre: $0.titre, detail: $0.artiste, chevron: false) }
                 let elements = aleatoire + pistes
                 EcranListe(cle: .musique, elements: elements,
                            vide: "Aucun morceau épinglé sur ton profil Telegram.") { e in
+                    if e.id == "__coverflow" {
+                        nav.ouvrir(.coverFlow)
+                        return
+                    }
                     if e.id == "__aleatoire" {
                         lecteur.jouer(morceaux.shuffled(), depuis: 0)
                     } else if let i = morceaux.firstIndex(where: { $0.id == e.id }) {

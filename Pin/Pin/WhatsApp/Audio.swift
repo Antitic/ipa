@@ -201,3 +201,64 @@ final class Dictee: ObservableObject {
         SessionAudio.lecture()
     }
 }
+
+/// Transcrit un vocal en texte, sur l'iPhone (reconnaissance vocale d'Apple),
+/// seulement quand tu le demandes. Les textes sont gardés sur l'iPhone.
+@MainActor
+final class Transcripteur: ObservableObject {
+    static let partage = Transcripteur()
+
+    @Published private(set) var textes: [String: String] = [:]
+    @Published private(set) var enCours: Set<String> = []
+    @Published private(set) var erreurs: [String: String] = [:]
+
+    private let cle = "transcriptions"
+
+    private init() {
+        textes = (UserDefaults.standard.dictionary(forKey: cle) as? [String: String]) ?? [:]
+    }
+
+    func transcrire(_ id: String) {
+        guard textes[id] == nil, !enCours.contains(id) else { return }
+        enCours.insert(id)
+        erreurs[id] = nil
+        Task {
+            defer { enCours.remove(id) }
+            do {
+                let autorise = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+                    SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0 == .authorized) }
+                }
+                guard autorise else { throw ErreurPin(message: "Reconnaissance vocale refusée (Réglages iPhone).", statut: 0) }
+                guard let reco = SFSpeechRecognizer(locale: Locale(identifier: "fr-FR")), reco.isAvailable else {
+                    throw ErreurPin(message: "Reconnaissance vocale indisponible.", statut: 0)
+                }
+                let data = try await API.donnees("/api/whatsapp/medias/\(API.segment(id))")
+                let fichier = FileManager.default.temporaryDirectory.appendingPathComponent("transcription-\(UUID().uuidString).m4a")
+                try data.write(to: fichier)
+                defer { try? FileManager.default.removeItem(at: fichier) }
+                let req = SFSpeechURLRecognitionRequest(url: fichier)
+                req.shouldReportPartialResults = false
+                req.addsPunctuation = true
+                if reco.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+                let texte: String = try await withCheckedThrowingContinuation { c in
+                    var fini = false
+                    reco.recognitionTask(with: req) { resultat, erreur in
+                        guard !fini else { return }
+                        if let resultat, resultat.isFinal {
+                            fini = true
+                            c.resume(returning: resultat.bestTranscription.formattedString)
+                        } else if let erreur {
+                            fini = true
+                            c.resume(throwing: erreur)
+                        }
+                    }
+                }
+                let propre = texte.trimmingCharacters(in: .whitespacesAndNewlines)
+                textes[id] = propre.isEmpty ? "(rien d'audible)" : propre
+                UserDefaults.standard.set(textes, forKey: cle)
+            } catch {
+                erreurs[id] = "Transcription impossible."
+            }
+        }
+    }
+}
