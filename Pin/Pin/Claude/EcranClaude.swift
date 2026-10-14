@@ -53,7 +53,7 @@ struct EcranClaude: View {
             guard claude.etat == .pret else { return }
             await charger()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(8))
+                try? await Task.sleep(for: .seconds(3))
                 if Task.isCancelled { break }
                 try? await claude.chargerConversations()
             }
@@ -136,7 +136,7 @@ struct EcranDiscussionClaude: View {
             // Ce que tu écris sur claude.ai (ou un autre appareil) arrive ici en
             // quelques secondes, sans recharger.
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .milliseconds(1200))
                 if Task.isCancelled { break }
                 await etat.rafraichir()
             }
