@@ -51,7 +51,9 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     func arreter() {
         rafaleEnCours = false
         file.async {
-            if self.film.isRecording { self.film.stopRecording() } if self.session.isRunning { self.session.stopRunning() } }
+            if self.film.isRecording { self.film.stopRecording() }
+            if self.session.isRunning { self.session.stopRunning() }
+        }
     }
 
     private func configurer() {
