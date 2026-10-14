@@ -16,8 +16,6 @@ struct MenuPrincipal: View {
             ElementListe(id: "photos", titre: "Photos"),
             ElementListe(id: "claude", titre: "Claude"),
             ElementListe(id: "meteo", titre: "Météo"),
-            ElementListe(id: "notes", titre: "Notes"),
-            ElementListe(id: "horloge", titre: "Horloge"),
             ElementListe(id: "jeux", titre: "Jeux"),
             ElementListe(id: "reglages", titre: "Réglages"),
         ]
@@ -38,8 +36,6 @@ struct MenuPrincipal: View {
             case "claude": nav.ouvrir(.claude)
             case "meteo": nav.ouvrir(.meteo)
             case "jeux": nav.ouvrir(.jeux)
-            case "notes": nav.ouvrir(.notes)
-            case "horloge": nav.ouvrir(.horloge)
             case "reglages": nav.ouvrir(.reglages)
             default: nav.ouvrir(.enLecture)
             }

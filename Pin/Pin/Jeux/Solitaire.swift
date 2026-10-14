@@ -47,6 +47,12 @@ final class PartieSolitaire: ObservableObject {
         gagne = false
     }
 
+    /// ⏮ ⏭ : saute entre le haut (pioche, défausse, fondations) et les colonnes.
+    func sauter(_ s: Int) {
+        if curseur < 6 { curseur = s > 0 ? 6 : 0 } else { curseur = s > 0 ? 2 : 0 }
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
     func deplacer(_ s: Int) { curseur = (curseur + s + 13) % 13 }
 
     func toucher(_ emplacement: Int) {
@@ -188,7 +194,8 @@ struct EcranSolitaire: View {
             let lc = (g.size.width - 8 * 4) / 7
             let hc = lc * 1.38
             ZStack {
-                Color(red: 0.05, green: 0.4, blue: 0.2)
+                RadialGradient(colors: [Color(red: 0.12, green: 0.5, blue: 0.3), Color(red: 0.03, green: 0.25, blue: 0.13)],
+                               center: .center, startRadius: 10, endRadius: max(g.size.width, g.size.height) * 0.8)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 4) {
                         emplacement(0, lc, hc) { carte(partie.pioche.last, lc, hc, vide: "↻") }
@@ -222,12 +229,15 @@ struct EcranSolitaire: View {
             g.centre = { partie.centre() }
             g.centreMaintenu = { partie.versFondation() }
             g.centreRelache = { }
+            g.lecture = { partie.versFondation() }
+            g.precedent = { partie.sauter(-1) }
+            g.suivant = { partie.sauter(1) }
         }
     }
 
     private func emplacement<C: View>(_ e: Int, _ lc: CGFloat, _ hc: CGFloat, @ViewBuilder _ contenu: () -> C) -> some View {
         contenu()
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(partie.curseur == e ? Color.yellow : .clear, lineWidth: 2.5))
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(partie.curseur == e ? Color.yellow : .clear, lineWidth: 2.5).shadow(color: .yellow.opacity(partie.curseur == e ? 0.9 : 0), radius: 4))
             .offset(y: partie.prise?.emplacement == e ? -4 : 0)
             .onTapGesture { partie.toucher(e) }
     }
@@ -254,7 +264,8 @@ struct EcranSolitaire: View {
         }
         .frame(width: lc, alignment: .top)
         .overlay(alignment: .top) {
-            RoundedRectangle(cornerRadius: 4).stroke(partie.curseur == c + 6 ? Color.yellow : .clear, lineWidth: 2.5)
+            RoundedRectangle(cornerRadius: 5).stroke(partie.curseur == c + 6 ? Color.yellow : .clear, lineWidth: 2.5)
+                .shadow(color: .yellow.opacity(partie.curseur == c + 6 ? 0.9 : 0), radius: 4)
                 .frame(width: lc + 2, height: hc + CGFloat(cachees) * pasCache + CGFloat(max(visibles - 1, 0)) * pasVisible + 2)
                 .offset(y: -1)
         }
@@ -266,22 +277,27 @@ struct EcranSolitaire: View {
     private func carte(_ c: PartieSolitaire.Carte?, _ lc: CGFloat, _ hc: CGFloat, vide: String = "") -> some View {
         if let c, c.visible {
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.white)
-                RoundedRectangle(cornerRadius: 4).stroke(Color.black.opacity(0.3), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(LinearGradient(colors: [.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom))
+                RoundedRectangle(cornerRadius: 4).stroke(Color.black.opacity(0.35), lineWidth: 0.5)
                 VStack(alignment: .leading, spacing: -2) {
-                    Text(c.nom).font(.system(size: lc * 0.34, weight: .bold))
+                    Text(c.nom).font(.system(size: lc * 0.36, weight: .heavy, design: .rounded))
                     Text(c.symbole).font(.system(size: lc * 0.32))
                 }
-                .padding(.leading, 2)
-                Text(c.symbole).font(.system(size: lc * 0.55)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
+                .padding(.leading, 2).padding(.top, 1)
+                Text(c.symbole).font(.system(size: lc * 0.62)).opacity(0.9)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing).padding(2)
             }
-            .foregroundStyle(c.rouge ? Color.red : Color.black)
+            .foregroundStyle(c.rouge ? Color(red: 0.85, green: 0.1, blue: 0.12) : Color(white: 0.1))
             .frame(width: lc, height: hc)
+            .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
         } else if c != nil {
             RoundedRectangle(cornerRadius: 4)
                 .fill(LinearGradient(colors: [Color(red: 0.2, green: 0.35, blue: 0.75), Color(red: 0.1, green: 0.2, blue: 0.5)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.white.opacity(0.8), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.white.opacity(0.85), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.white.opacity(0.25), lineWidth: 0.5).padding(3))
                 .frame(width: lc, height: hc)
+                .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
         } else {
             RoundedRectangle(cornerRadius: 4).stroke(Color.white.opacity(0.3), lineWidth: 1)
                 .overlay(Text(vide).font(.system(size: lc * 0.4)).foregroundStyle(.white.opacity(0.35)))

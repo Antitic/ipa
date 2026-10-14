@@ -164,45 +164,66 @@ struct EcranBrick: View {
     @StateObject private var partie = PartieBrick()
     @AppStorage("record.brick") private var record = 0
 
-    private let couleurs: [Color] = [.red, .orange, .yellow, .green, Color(red: 0.2, green: 0.5, blue: 0.95)]
+    private let couleurs: [(Color, Color)] = [
+        (Color(red: 1, green: 0.4, blue: 0.4), Color(red: 0.75, green: 0.1, blue: 0.15)),
+        (Color(red: 1, green: 0.7, blue: 0.3), Color(red: 0.85, green: 0.4, blue: 0.05)),
+        (Color(red: 1, green: 0.95, blue: 0.4), Color(red: 0.85, green: 0.7, blue: 0.1)),
+        (Color(red: 0.5, green: 0.95, blue: 0.5), Color(red: 0.1, green: 0.6, blue: 0.2)),
+        (Color(red: 0.5, green: 0.75, blue: 1), Color(red: 0.1, green: 0.35, blue: 0.85)),
+    ]
 
     var body: some View {
         GeometryReader { g in
             let w = g.size.width, h = g.size.height
             ZStack(alignment: .topLeading) {
-                Color.black
+                LinearGradient(colors: [Color(red: 0.04, green: 0.04, blue: 0.14), Color(red: 0.1, green: 0.05, blue: 0.22)], startPoint: .top, endPoint: .bottom)
                 ForEach(partie.briques.filter(\.vivante)) { b in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(couleurs[b.ligne % couleurs.count])
+                    let c = couleurs[b.ligne % couleurs.count]
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(LinearGradient(colors: [c.0, c.1], startPoint: .top, endPoint: .bottom))
+                        .overlay(alignment: .top) {
+                            Capsule().fill(.white.opacity(0.45)).frame(height: 1.5).padding(.horizontal, 3).padding(.top, 1.5)
+                        }
+                        .shadow(color: c.1.opacity(0.5), radius: 2, y: 1)
                         .frame(width: w / CGFloat(partie.colonnes) - 4, height: h * partie.hauteurBrique)
                         .position(x: b.x * w, y: b.y * h)
                 }
+                // Raquette
                 Capsule()
-                    .fill(LinearGradient(colors: [.white, Color(white: 0.7)], startPoint: .top, endPoint: .bottom))
-                    .frame(width: partie.largeurRaquette * w, height: 7)
-                    .position(x: partie.raquette * w, y: partie.yRaquette * h + 3)
-                Circle().fill(.white)
+                    .fill(LinearGradient(colors: [.white, Color(red: 0.55, green: 0.65, blue: 0.85)], startPoint: .top, endPoint: .bottom))
+                    .shadow(color: Color(red: 0.4, green: 0.6, blue: 1).opacity(0.8), radius: 5)
+                    .frame(width: partie.largeurRaquette * w, height: 8)
+                    .position(x: partie.raquette * w, y: partie.yRaquette * h + 4)
+                // Balle
+                Circle()
+                    .fill(RadialGradient(colors: [.white, Color(red: 0.7, green: 0.85, blue: 1)], center: .topLeading, startRadius: 0, endRadius: partie.rayon * w * 2))
+                    .shadow(color: .white.opacity(0.9), radius: 4)
                     .frame(width: partie.rayon * 2 * w, height: partie.rayon * 2 * w)
                     .position(x: partie.balle.x * w, y: partie.balle.y * h)
                 HStack {
-                    Text("\(partie.score)").font(.system(size: 11, weight: .bold).monospacedDigit())
+                    Text("\(partie.score)").font(.system(size: 12, weight: .heavy, design: .rounded).monospacedDigit())
                     Spacer()
-                    Text("Niv. \(partie.niveau)").font(.system(size: 10))
+                    Text("Niv. \(partie.niveau)").font(.system(size: 10, weight: .semibold))
                     Spacer()
-                    Text(String(repeating: "●", count: max(partie.vies, 0))).font(.system(size: 9))
+                    HStack(spacing: 2) {
+                        ForEach(0..<3, id: \.self) { i in
+                            Circle().fill(i < partie.vies ? Color.white : Color.white.opacity(0.2)).frame(width: 7, height: 7)
+                        }
+                    }
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 6)
+                .padding(.horizontal, 8)
                 .padding(.top, 3)
                 if partie.etat != .enJeu {
-                    VStack(spacing: 3) {
+                    VStack(spacing: 4) {
                         Text(partie.etat == .perdu ? "Partie terminée" : (partie.score == 0 ? "Brick" : "Prêt ?"))
-                            .font(.system(size: 16, weight: .bold))
-                        if partie.etat == .perdu { Text("Score \(partie.score) · Record \(record)").font(.system(size: 11)) }
-                        Text("Molette : raquette · Centre : jouer").font(.system(size: 10)).opacity(0.7)
+                            .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        if partie.etat == .perdu { Text("Score \(partie.score) · Record \(record)").font(.system(size: 11, weight: .semibold)) }
+                        Text("Molette ou ⏮ ⏭ : raquette\nCentre : lancer").font(.system(size: 10)).multilineTextAlignment(.center).opacity(0.85)
                     }
                     .foregroundStyle(.white)
-                    .frame(width: w, height: h * 0.25)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(.black.opacity(0.6)))
                     .position(x: w / 2, y: h * 0.6)
                 }
             }
@@ -214,6 +235,9 @@ struct EcranBrick: View {
         .onDisappear { partie.arreter() }
         .roue { g in
             g.tour = { s in partie.deplacer(s) }
+            g.precedent = { partie.deplacer(-4) }
+            g.suivant = { partie.deplacer(4) }
+            g.lecture = { partie.lancer() }
             g.centre = { partie.lancer() }
         }
     }
