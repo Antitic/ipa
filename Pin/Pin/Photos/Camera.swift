@@ -3,7 +3,7 @@ import AVFoundation
 import Photos
 
 /// L'appareil photo : aperçu dans l'écran de l'iPod. Mode Photo : centre =
-/// photo, centre maintenu = rafale. Mode Vidéo : centre = démarrer / arrêter.
+/// photo. Mode Vidéo : centre = démarrer / arrêter.
 /// ⏮ ⏭ = changer de mode, ⏯ = changer de caméra. Tout va dans la Pellicule.
 final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate, AVCaptureFileOutputRecordingDelegate {
     enum Mode: String, CaseIterable { case photo = "PHOTO", video = "VIDÉO" }
@@ -12,19 +12,12 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     private let sortie = AVCapturePhotoOutput()
     private let film = AVCaptureMovieFileOutput()
     private var entreeMicro: AVCaptureDeviceInput?
-    private var rafaleEnCours = false
-    // Rafale en cours de constitution (touchés uniquement sur la file `file`).
-    private var rafaleOuverte = false
-    private var rafaleFermee = false
-    private var tampon: [Data] = []
-    private var enAttente = 0
     private var minuteurVideo: Timer?
     private let tic = UIImpactFeedbackGenerator(style: .light)
 
     @Published var mode: Mode = .photo
     @Published var enregistre = false
     @Published var duree: Int = 0
-    @Published var compteRafale = 0
     private let file = DispatchQueue(label: "pin.camera")
     private var position: AVCaptureDevice.Position = .back
     private var appareil: AVCaptureDevice?
@@ -54,7 +47,6 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     }
 
     func arreter() {
-        rafaleEnCours = false
         file.async {
             if self.film.isRecording { self.film.stopRecording() }
             if self.session.isRunning { self.session.stopRunning() }
@@ -115,7 +107,7 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
         }
     }
 
-    // MARK: - Modes, rafale, vidéo
+    // MARK: - Modes, vidéo
 
     private func ajouterMicro() {
         guard entreeMicro == nil, AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
@@ -126,7 +118,7 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     }
 
     func changerMode(_ sens: Int) {
-        guard !enregistre, !rafaleEnCours else { return }
+        guard !enregistre else { return }
         let tous = Mode.allCases
         let i = (tous.firstIndex(of: mode)! + sens + tous.count) % tous.count
         let nouveau = tous[i]
@@ -150,75 +142,6 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     /// Centre (appui court) : photo, ou démarrer / arrêter la vidéo.
     func action() {
         if mode == .photo { declencher() } else { basculerVideo() }
-    }
-
-    func debutRafale() {
-        guard mode == .photo, !rafaleEnCours else { return }
-        rafaleEnCours = true
-        DispatchQueue.main.async { self.compteRafale = 0 }
-        file.async {
-            self.rafaleOuverte = true
-            self.rafaleFermee = false
-            self.tampon = []
-            self.enAttente = 0
-        }
-        tirRafale()
-    }
-
-    func finRafale() {
-        guard rafaleEnCours else { return }
-        rafaleEnCours = false
-        DispatchQueue.main.async { self.compteRafale = 0 }
-        file.async {
-            self.rafaleFermee = true
-            self.terminerRafale()
-        }
-    }
-
-    /// Sur la file caméra : quand toutes les photos de la rafale sont arrivées,
-    /// elles sont enregistrées d'un coup, dans un album « Rafale » daté.
-    private func terminerRafale() {
-        guard rafaleOuverte, rafaleFermee, enAttente == 0 else { return }
-        let photos = tampon
-        rafaleOuverte = false
-        rafaleFermee = false
-        tampon = []
-        guard !photos.isEmpty else { return }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "fr_FR")
-        f.dateFormat = "d MMM HH:mm:ss"
-        let titre = "Rafale \(f.string(from: Date()))"
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { statut in
-            guard statut == .authorized || statut == .limited else {
-                DispatchQueue.main.async { self.message = "Accès à la Pellicule refusé" }
-                return
-            }
-            PHPhotoLibrary.shared().performChanges {
-                let album = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: titre)
-                let marques = photos.compactMap { data -> PHObjectPlaceholder? in
-                    let r = PHAssetCreationRequest.forAsset()
-                    r.addResource(with: .photo, data: data, options: nil)
-                    return r.placeholderForCreatedAsset
-                }
-                album.addAssets(marques as NSArray)
-            } completionHandler: { ok, _ in
-                DispatchQueue.main.async {
-                    let n = photos.count
-                    self.message = ok ? "Rafale de \(n) photo\(n > 1 ? "s" : "") dans l'album « \(titre) »" : "Enregistrement impossible"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.message = nil }
-                }
-            }
-        }
-    }
-
-    private func tirRafale() {
-        file.async {
-            guard self.rafaleEnCours, self.session.isRunning, self.tampon.count + self.enAttente < 60 else { return }
-            self.enAttente += 1
-            self.prendre(rapide: true)
-            DispatchQueue.main.async { self.compteRafale += 1 }
-            self.file.asyncAfter(deadline: .now() + 0.15) { self.tirRafale() }
-        }
     }
 
     private func basculerVideo() {
@@ -306,15 +229,7 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         let donnees = error == nil ? photo.fileDataRepresentation() : nil
-        file.async {
-            if self.rafaleOuverte {
-                if let donnees { self.tampon.append(donnees) }
-                self.enAttente -= 1
-                self.terminerRafale()
-            } else {
-                self.enregistrer(donnees)
-            }
-        }
+        enregistrer(donnees)
     }
 
     private func enregistrer(_ donnees: Data?) {
@@ -396,13 +311,6 @@ struct EcranCamera: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.top, camera.zoomVisible || camera.zoomAffiche != 1 ? 36 : 8)
             }
-            if camera.compteRafale > 0 {
-                Text("\(camera.compteRafale)")
-                    .font(.system(size: 30, weight: .heavy, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.white)
-                    .shadow(radius: 3)
-                    .frame(maxHeight: .infinity, alignment: .center)
-            }
             VStack(spacing: 4) {
                 HStack(spacing: 14) {
                     ForEach(CameraModele.Mode.allCases, id: \.self) { m in
@@ -414,7 +322,7 @@ struct EcranCamera: View {
                 .padding(.horizontal, 12).padding(.vertical, 3)
                 .background(Capsule().fill(.black.opacity(0.5)))
                 Text(camera.message ?? (camera.mode == .photo
-                     ? "Centre : photo · maintenu : rafale"
+                     ? "Centre : photo"
                      : (camera.enregistre ? "Centre : arrêter" : "Centre : filmer")))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white)
@@ -429,8 +337,6 @@ struct EcranCamera: View {
         .roue { g in
             g.tour = { s in camera.zoomer(s) }
             g.centre = { camera.action() }
-            g.centreMaintenu = { camera.debutRafale() }
-            g.centreRelache = { camera.finRafale() }
             g.precedent = { camera.changerMode(-1) }
             g.suivant = { camera.changerMode(1) }
             g.lecture = { camera.changerCamera() }
