@@ -9,6 +9,7 @@ struct Molette: View {
     @EnvironmentObject var nav: Navigateur
     @EnvironmentObject var lecteur: Lecteur
     @AppStorage("haptique") private var haptique = true
+    @Environment(\.skin) private var skin
 
     @State private var dernierAngle: Double?
     @State private var cumul: Double = 0
@@ -49,8 +50,8 @@ struct Molette: View {
     private func anneau(_ d: CGFloat) -> some View {
         ZStack {
             Circle()
-                .fill(LinearGradient(colors: [Color(white: 0.97), Color(white: 0.88)], startPoint: .top, endPoint: .bottom))
-                .overlay(Circle().stroke(Color(white: 0.78), lineWidth: 1))
+                .fill(LinearGradient(colors: skin.molette, startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().stroke(skin.contourMolette, lineWidth: 1))
                 .shadow(color: .black.opacity(0.12), radius: 3, y: 2)
             Group {
                 Text("MENU")
@@ -66,16 +67,16 @@ struct Molette: View {
                     .font(.system(size: d * 0.05))
                     .offset(y: d * 0.39)
             }
-            .foregroundStyle(Color(white: 0.62))
+            .foregroundStyle(skin.libellesMolette)
         }
         .frame(width: d, height: d)
     }
 
     private func boutonCentre(_ d: CGFloat) -> some View {
         Circle()
-            .fill(LinearGradient(colors: centreEnfonce ? [Color(white: 0.86), Color(white: 0.93)] : [Color(white: 0.99), Color(white: 0.9)],
+            .fill(LinearGradient(colors: centreEnfonce ? skin.centreEnfonce : skin.centre,
                                  startPoint: .top, endPoint: .bottom))
-            .overlay(Circle().stroke(Color(white: 0.76), lineWidth: 1))
+            .overlay(Circle().stroke(skin.contourMolette, lineWidth: 1))
             .shadow(color: .black.opacity(centreEnfonce ? 0.02 : 0.1), radius: 2, y: 1)
             .frame(width: d, height: d)
             .contentShape(Circle())

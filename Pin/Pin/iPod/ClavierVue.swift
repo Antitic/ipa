@@ -14,7 +14,7 @@ enum Touche: Hashable {
         switch self {
         case .car: return 1
         case .emoji: return 1.25
-        case .pageEmoji: return 1.35
+        case .pageEmoji(let sens): return sens < 0 ? 1.35 : 1.1   // mêmes places que 😀 et ⌄
         case .maj, .effacer: return 1.35
         case .couche: return 1.35
         case .fermer: return 1.1
@@ -123,9 +123,35 @@ struct ClavierIPod: View {
         // L'unité : une ligne pleine compte dix touches (trois sur le pavé numérique).
         let colonnes: CGFloat = estPave ? 3 : 10
         let unite = (largeurTotale - (colonnes - 1) * ecart) / colonnes
-        let largeurDe: (Touche) -> CGFloat = { t in
+        let largeurBase: (Touche) -> CGFloat = { t in
             let u = largeurUnites(t)
             return u * unite + (estPave ? max(0, u - 1) * ecart : 0)
+        }
+        // Rangée du milieu à touches fixes (⇧ / #+= / 123 … ⌫) : la première et
+        // la dernière restent collées aux bords à la même place dans toutes
+        // les couches ; seules les touches du milieu s'élargissent.
+        var debutFixe = touches.first == .maj
+        if case .couche? = touches.first { debutFixe = true }
+        if !estPave, debutFixe, !touches.contains(.espace), touches.count >= 3, touches.last == .effacer {
+            let cote = largeurBase(.maj)
+            let total = 10 * unite + 9 * ecart
+            let marge = (total - 2 * cote - (7 * unite + 6 * ecart)) / 2
+            let milieu = total - 2 * cote - 2 * marge
+            let n = CGFloat(touches.count - 2)
+            let l = (milieu - (n - 1) * ecart) / n
+            var resultat: [(CGFloat, CGFloat, Touche, Bool)] = [(0, cote, touches[0], false)]
+            var x = cote + marge
+            for (i, t) in touches.dropFirst().dropLast().enumerated() {
+                resultat.append((x, l, t, CGFloat(i) >= n / 2))
+                x += l + ecart
+            }
+            resultat.append((total - cote, cote, touches.last!, true))
+            return resultat
+        }
+        // En bas de la couche emojis, ⌫ prend la place (et la taille) de « retour ».
+        let largeurDe: (Touche) -> CGFloat = { t in
+            if t == .effacer, touches.contains(.espace) { return largeurBase(.retour) }
+            return largeurBase(t)
         }
         let fixes = touches.filter { $0 != .espace }.reduce(CGFloat(0)) { $0 + largeurDe($1) }
         let nbEcarts = CGFloat(touches.count - 1) * ecart
@@ -171,7 +197,7 @@ struct ClavierIPod: View {
                 Array(page.dropFirst(i).prefix(8)).map { .emoji($0) }
             }
             rangees = rangees.filter { !$0.isEmpty }
-            return rangees + [[.couche(.lettres, "ABC"), .pageEmoji(-1), .espace, .pageEmoji(1), .effacer]]
+            return rangees + [[.couche(.lettres, "ABC"), .pageEmoji(-1), .pageEmoji(1), .espace, .effacer]]
         case .symboles:
             return [
                 ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="].map { .car($0) },

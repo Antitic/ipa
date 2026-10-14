@@ -215,7 +215,7 @@ final class EtatDiscussionClaude: ObservableObject {
         if r.messages != messages || r.feuille != feuille {
             messages = r.messages
             feuille = r.feuille
-            erreur = nil
+            if r.messages.last?.humain == false { erreur = nil }
         }
     }
 
@@ -239,25 +239,66 @@ final class EtatDiscussionClaude: ObservableObject {
         envoi = true
         reponse = ""
         let premier = uuid.isEmpty
-        messages.append(MessageClaude(id: "moi-\(UUID().uuidString)", humain: true, texte: t))
-        do {
-            if uuid.isEmpty { uuid = try await ClaudeWeb.partage.nouvelleConversation() }
-            try await ClaudeWeb.partage.envoyer(t, dans: uuid, parent: feuille) { [weak self] r in
-                self?.reponse = r
+        let idProvisoire = "moi-\(UUID().uuidString)"
+        messages.append(MessageClaude(id: idProvisoire, humain: true, texte: t))
+        let humainsAvant = messages.filter(\.humain).count - 1
+
+        var essais = 0
+        while true {
+            essais += 1
+            do {
+                if uuid.isEmpty { uuid = try await ClaudeWeb.partage.nouvelleConversation() }
+                // Toujours repartir du dernier message réel : si tu as écrit sur
+                // claude.ai entre-temps, l'ancien point de départ serait refusé.
+                if !premier || essais > 1, let r = try? await ClaudeWeb.partage.messages(uuid) {
+                    feuille = r.feuille
+                }
+                try await ClaudeWeb.partage.envoyer(t, dans: uuid, parent: feuille) { [weak self] r in
+                    self?.reponse = r
+                }
+                // On relit la discussion avant de rendre la main : les vrais
+                // identifiants servent de point de départ au message suivant.
+                await charger()
+                envoi = false
+                reponse = ""
+                if premier { await ClaudeWeb.partage.titrer(uuid, premierMessage: t) }
+                try? await ClaudeWeb.partage.chargerConversations()
+                return
+            } catch {
+                // Le message est peut-être bien arrivé (coupure pendant la réponse) :
+                // on regarde ce que claude.ai a vraiment reçu.
+                if !uuid.isEmpty, let r = try? await ClaudeWeb.partage.messages(uuid),
+                   r.messages.filter(\.humain).count > humainsAvant,
+                   r.messages.last(where: \.humain)?.texte.trimmingCharacters(in: .whitespacesAndNewlines) == t {
+                    messages = r.messages
+                    feuille = r.feuille
+                    envoi = false
+                    let partiel = reponse
+                    reponse = ""
+                    if r.messages.last?.humain == true {
+                        // Réponse coupée : on montre ce qu'on a reçu ; la suite
+                        // arrivera par la relecture automatique si Claude finit.
+                        if !partiel.isEmpty {
+                            messages.append(MessageClaude(id: "partiel-\(UUID().uuidString)", humain: false, texte: partiel))
+                        }
+                        erreur = "Réponse interrompue (connexion). Elle s'affichera si Claude l'a terminée."
+                    }
+                    return
+                }
+                // Coupure passagère : un nouvel essai, une seule fois.
+                if essais < 2, let e = error as? ClaudeWeb.ErreurHTTP, e.passagere {
+                    reponse = ""
+                    try? await Task.sleep(for: .milliseconds(1500))
+                    continue
+                }
+                // Échec réel : rien n'est perdu, ton texte revient dans le champ.
+                envoi = false
+                reponse = ""
+                messages.removeAll { $0.id == idProvisoire }
+                if texte.isEmpty { texte = t }
+                erreur = (error.localizedDescription) + " Ton message est remis dans le champ : centre pour réessayer."
+                return
             }
-            envoi = false
-            reponse = ""
-            // On relit la discussion : les vrais identifiants servent de parent au message suivant.
-            await charger()
-            if premier { await ClaudeWeb.partage.titrer(uuid, premierMessage: t) }
-            try? await ClaudeWeb.partage.chargerConversations()
-        } catch {
-            envoi = false
-            if !reponse.isEmpty {
-                messages.append(MessageClaude(id: "partiel-\(UUID().uuidString)", humain: false, texte: reponse))
-            }
-            reponse = ""
-            erreur = error.localizedDescription
         }
     }
 }

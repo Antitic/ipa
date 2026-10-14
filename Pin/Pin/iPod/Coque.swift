@@ -66,11 +66,12 @@ enum MargesFenetre {
 
 /// Façade blanche légèrement brossée, avec un reflet en haut.
 struct Boitier: View {
+    @Environment(\.skin) private var skin
+
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(white: 0.985), Color(white: 0.93), Color(white: 0.955)],
-                           startPoint: .top, endPoint: .bottom)
-            LinearGradient(colors: [.white.opacity(0.7), .clear], startPoint: .top, endPoint: .center)
+            LinearGradient(colors: skin.facade, startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: [.white.opacity(skin.reflet), .clear], startPoint: .top, endPoint: .center)
                 .blendMode(.screen)
         }
         .ignoresSafeArea()
@@ -128,6 +129,7 @@ struct EcranIPod: View {
         case .connexion: EcranConnexion()
         case .telegram: EcranTelegram()
         case .mail: EcranMail()
+        case .skins: EcranSkins()
         case .boiteMail(let path, _): EcranBoiteMail(path: path)
         case .lettreMail(let box, let uid): EcranLettreMail(box: box, uid: uid)
         case .ecrireMail(let r): EcranEcrireMail(reponse: r)

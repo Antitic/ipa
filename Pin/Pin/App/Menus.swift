@@ -63,6 +63,7 @@ struct EcranReglages: View {
     @EnvironmentObject var lecteur: Lecteur
     @AppStorage("haptique") private var haptique = true
     @AppStorage("clics") private var clics = true
+    @AppStorage("skin") private var skin = Skin.blanc.rawValue
     @State private var telegramLie: Bool?
     @State private var confirmation: String?
     @ObservedObject private var maj = MiseAJour.partage
@@ -95,6 +96,7 @@ struct EcranReglages: View {
             ElementListe(id: "compte", titre: "Compte Pin", detail: compte.email ?? "Non connecté"),
             ElementListe(id: "whatsapp", titre: "WhatsApp", detail: detailWhatsApp),
             ElementListe(id: "telegram", titre: "Telegram (musique)", detail: detailTelegram),
+            ElementListe(id: "skin", titre: "Skin", detail: (Skin(rawValue: skin) ?? .blanc).nom),
             ElementListe(id: "clics", titre: "Clics", detail: clics ? "Oui (coupés en mode silencieux)" : "Non", chevron: false),
             ElementListe(id: "haptique", titre: "Retour haptique", detail: haptique ? "Oui" : "Non", chevron: false),
             ElementListe(id: "cache", titre: "Vider le cache musique", detail: confirmation, chevron: false),
@@ -106,6 +108,7 @@ struct EcranReglages: View {
             case "compte": nav.ouvrir(.connexion)
             case "whatsapp": if compte.connecte { nav.ouvrir(.liaisonWhatsApp) } else { nav.ouvrir(.connexion) }
             case "telegram": if compte.connecte { nav.ouvrir(.telegram) } else { nav.ouvrir(.connexion) }
+            case "skin": nav.ouvrir(.skins)
             case "haptique": haptique.toggle()
             case "clics": clics.toggle()
             default:

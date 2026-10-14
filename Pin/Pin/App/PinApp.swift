@@ -20,6 +20,7 @@ struct PinApp: App {
         WindowGroup {
             Coque()
                 .modifier(ShuffleSecousse())
+                .modifier(ModificateurSkin())
                 .environmentObject(nav)
                 .environmentObject(compte)
                 .environmentObject(lecteur)
@@ -37,7 +38,7 @@ struct PinApp: App {
                     if connecte { whatsapp.demarrer() } else { whatsapp.arreter() }
                 }
                 .onChange(of: phase) { _, p in
-                    if p == .active { Task { await MiseAJour.partage.verifier() } }
+                    if p == .active { Task { await MiseAJour.partage.verifier() }; Task { await ClaudeWeb.partage.reveil() } }
                     if p == .active, compte.connecte { whatsapp.reconnecter() }
                 }
         }

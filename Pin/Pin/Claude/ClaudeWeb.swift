@@ -162,7 +162,7 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
         }
         affichee = false
         if let clavier, clavier.champ == Clavier.champWeb { clavier.fermer() }
-        if etat == .pret, web.url?.path != Self.racine.path { web.load(URLRequest(url: Self.racine)) }
+        if etat == .pret, envoisActifs == 0, web.url?.path != Self.racine.path { web.load(URLRequest(url: Self.racine)) }
         guard web.superview !== fenetre else { return }
         web.removeFromSuperview()
         web.frame = CGRect(x: 0, y: 0, width: 2, height: 2)
@@ -216,7 +216,16 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
             organisation = (avecChat ?? orgs[0])["uuid"] as? String
             etat = .pret
         } catch let e as ErreurHTTP where e.statut == 401 || e.statut == 403 {
+            organisation = nil
             etat = .connexionRequise
+        } catch let e as ErreurHTTP where e.passagere {
+            // Réseau ou page pas encore prête : ce n'est pas une déconnexion, on réessaie.
+            if etat != .pret {
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(3))
+                    await self?.verifier()
+                }
+            }
         } catch {
             if etat != .pret { etat = .connexionRequise }
         }
@@ -227,14 +236,61 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     struct ErreurHTTP: LocalizedError {
         let statut: Int
         let corps: String
-        var errorDescription: String? {
-            if let d = corps.data(using: .utf8),
-               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-               let e = j["error"] as? [String: Any], let m = e["message"] as? String {
-                return m
-            }
-            return "claude.ai a répondu \(statut)."
+
+        /// 0 = la requête n'a pas abouti (réseau coupé, page rechargée, iPhone en veille).
+        var passagere: Bool { statut == 0 || statut == 408 || statut == 502 || statut == 503 || statut == 504 || statut == 529 }
+
+        private var messageServeur: String? {
+            guard let d = corps.data(using: .utf8),
+                  let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return nil }
+            if let e = j["error"] as? [String: Any], let m = e["message"] as? String { return m }
+            if let m = j["detail"] as? String { return m }
+            return nil
         }
+
+        var errorDescription: String? {
+            switch statut {
+            case 0: return "Connexion à claude.ai perdue."
+            case 401, 403: return "Session claude.ai expirée : reconnecte-toi."
+            case 429: return messageServeur.map { "Limite claude.ai atteinte : \($0)" } ?? "Limite de messages claude.ai atteinte, réessaie plus tard."
+            case 500...599: return "claude.ai est surchargé, réessaie dans un instant."
+            default: return messageServeur ?? "claude.ai a répondu \(statut)."
+            }
+        }
+    }
+
+    /// Envois en cours : tant qu'il y en a, la page de repos n'est jamais rechargée.
+    private var envoisActifs = 0
+
+    /// Avant chaque appel : la page doit être sur claude.ai et le compte connu.
+    /// Si iOS a tué ou vidé la page (veille, mémoire), on la recharge.
+    func assurerPret() async throws {
+        if web.url?.host?.hasSuffix("claude.ai") != true || web.isLoading {
+            if web.url?.host?.hasSuffix("claude.ai") != true { web.load(URLRequest(url: Self.racine)) }
+            for _ in 0..<40 where web.isLoading || web.url?.host?.hasSuffix("claude.ai") != true {
+                try await Task.sleep(for: .milliseconds(250))
+            }
+        }
+        if organisation == nil { await verifier() }
+        if organisation == nil {
+            throw etat == .connexionRequise ? ErreurClaude(message: "Connecte-toi à claude.ai.") : ErreurHTTP(statut: 0, corps: "")
+        }
+    }
+
+    /// Au retour au premier plan : la page a pu être suspendue. Un petit appel
+    /// vérifie qu'elle répond ; sinon on la recharge.
+    func reveil() async {
+        guard demarre, !affichee, envoisActifs == 0 else { return }
+        do {
+            _ = try await appel("/api/organizations")
+        } catch let e as ErreurHTTP where e.statut == 0 {
+            web.load(URLRequest(url: Self.racine))
+        } catch {}
+    }
+
+    /// iOS a tué le processus de la page (mémoire) : on la relance.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        web.load(URLRequest(url: affichee ? URL(string: "https://claude.ai/login")! : Self.racine))
     }
 
     /// Un appel à claude.ai, fait par la page elle-même (avec tes cookies).
@@ -242,20 +298,33 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     func appel(_ chemin: String, methode: String = "GET", corps: [String: Any]? = nil) async throws -> Any? {
         let json = corps.flatMap { try? JSONSerialization.data(withJSONObject: $0) }.flatMap { String(data: $0, encoding: .utf8) } ?? ""
         let script = """
-        const r = await fetch(chemin, {
-          method: methode, credentials: 'include', cache: 'no-store',
-          headers: { 'content-type': 'application/json', 'accept': 'application/json' },
-          body: corps === '' ? undefined : corps
-        });
-        return { statut: r.status, texte: await r.text() };
+        try {
+          const r = await fetch(chemin, {
+            method: methode, credentials: 'include', cache: 'no-store',
+            headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+            body: corps === '' ? undefined : corps
+          });
+          return { statut: r.status, texte: await r.text() };
+        } catch (e) {
+          return { statut: 0, texte: String(e) };
+        }
         """
-        let res = try await web.callAsyncJavaScript(script, arguments: ["chemin": chemin, "methode": methode, "corps": json],
+        let res: Any?
+        do {
+            res = try await web.callAsyncJavaScript(script, arguments: ["chemin": chemin, "methode": methode, "corps": json],
                                                     in: nil, contentWorld: .page)
+        } catch {
+            // Page en cours de rechargement, ou processus de la page tué.
+            throw ErreurHTTP(statut: 0, corps: error.localizedDescription)
+        }
         guard let d = res as? [String: Any], let statut = (d["statut"] as? NSNumber)?.intValue else {
             throw ErreurClaude(message: "Réponse illisible de claude.ai.")
         }
         let texte = d["texte"] as? String ?? ""
-        guard (200..<300).contains(statut) else { throw ErreurHTTP(statut: statut, corps: texte) }
+        guard (200..<300).contains(statut) else {
+            if statut == 401 || statut == 403, !chemin.hasSuffix("/api/organizations") { etat = .connexionRequise }
+            throw ErreurHTTP(statut: statut, corps: texte)
+        }
         guard !texte.isEmpty, let donnees = texte.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: donnees)
     }
@@ -268,6 +337,7 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     // MARK: - Discussions
 
     func chargerConversations() async throws {
+        try await assurerPret()
         let o = try org()
         let r = try await appel("/api/organizations/\(o)/chat_conversations?limit=80")
         let liste = (r as? [[String: Any]]) ?? ((r as? [String: Any])?["data"] as? [[String: Any]]) ?? []
@@ -284,6 +354,7 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
     /// Les messages de la branche affichée sur claude.ai, et le dernier message
     /// (le parent du prochain).
     func messages(_ uuid: String) async throws -> (messages: [MessageClaude], feuille: String?) {
+        try await assurerPret()
         let o = try org()
         let r = try await appel("/api/organizations/\(o)/chat_conversations/\(uuid)?tree=True&rendering_mode=messages&render_all_tools=true")
         guard let c = r as? [String: Any] else { return ([], nil) }
@@ -327,6 +398,7 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// Crée une discussion vide et rend son identifiant.
     func nouvelleConversation() async throws -> String {
+        try await assurerPret()
         let o = try org()
         let uuid = UUID().uuidString.lowercased()
         try await appel("/api/organizations/\(o)/chat_conversations", methode: "POST",
@@ -336,7 +408,10 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// Envoie un message et reçoit la réponse au fil de l'eau.
     func envoyer(_ texte: String, dans uuid: String, parent: String?, recu: @escaping (String) -> Void) async throws {
+        try await assurerPret()
         let o = try org()
+        envoisActifs += 1
+        defer { envoisActifs -= 1 }
         let idFlux = UUID().uuidString
         var reponse = ""
         var erreurFlux: String?
@@ -373,34 +448,43 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
         ]
         let json = String(data: try JSONSerialization.data(withJSONObject: corps), encoding: .utf8) ?? "{}"
         let script = """
-        const r = await fetch(chemin, {
-          method: 'POST', credentials: 'include',
-          headers: { 'content-type': 'application/json', 'accept': 'text/event-stream' },
-          body: corps
-        });
-        if (!r.ok) { return { statut: r.status, texte: await r.text() }; }
-        const lecteur = r.body.getReader();
-        const dec = new TextDecoder();
-        let tampon = '';
-        for (;;) {
-          const { done, value } = await lecteur.read();
-          if (done) break;
-          tampon += dec.decode(value, { stream: true });
-          let i;
-          while ((i = tampon.indexOf('\\n')) >= 0) {
-            const ligne = tampon.slice(0, i).trim();
-            tampon = tampon.slice(i + 1);
-            if (ligne.startsWith('data:')) {
-              window.webkit.messageHandlers.pin.postMessage({ id: idFlux, data: ligne.slice(5).trim() });
+        try {
+          const r = await fetch(chemin, {
+            method: 'POST', credentials: 'include', cache: 'no-store',
+            headers: { 'content-type': 'application/json', 'accept': 'text/event-stream' },
+            body: corps
+          });
+          if (!r.ok) { return { statut: r.status, texte: await r.text() }; }
+          const lecteur = r.body.getReader();
+          const dec = new TextDecoder();
+          let tampon = '';
+          for (;;) {
+            const { done, value } = await lecteur.read();
+            if (done) break;
+            tampon += dec.decode(value, { stream: true });
+            let i;
+            while ((i = tampon.indexOf('\\n')) >= 0) {
+              const ligne = tampon.slice(0, i).trim();
+              tampon = tampon.slice(i + 1);
+              if (ligne.startsWith('data:')) {
+                window.webkit.messageHandlers.pin.postMessage({ id: idFlux, data: ligne.slice(5).trim() });
+              }
             }
           }
+          return { statut: r.status, texte: '' };
+        } catch (e) {
+          return { statut: 0, texte: String(e) };
         }
-        return { statut: r.status, texte: '' };
         """
-        let res = try await web.callAsyncJavaScript(
-            script,
-            arguments: ["chemin": "/api/organizations/\(o)/chat_conversations/\(uuid)/completion", "corps": json, "idFlux": idFlux],
-            in: nil, contentWorld: .page)
+        let res: Any?
+        do {
+            res = try await web.callAsyncJavaScript(
+                script,
+                arguments: ["chemin": "/api/organizations/\(o)/chat_conversations/\(uuid)/completion", "corps": json, "idFlux": idFlux],
+                in: nil, contentWorld: .page)
+        } catch {
+            throw ErreurHTTP(statut: 0, corps: error.localizedDescription)
+        }
         if let d = res as? [String: Any], let statut = (d["statut"] as? NSNumber)?.intValue, !(200..<300).contains(statut) {
             throw ErreurHTTP(statut: statut, corps: d["texte"] as? String ?? "")
         }
