@@ -140,7 +140,6 @@ struct EcranIPod: View {
         case .parachute: EcranParachute()
         case .solitaire: EcranSolitaire()
         case .snake: EcranSnake()
-        case .notes: EcranNotes()
         case .boiteMail(let path, _): EcranBoiteMail(path: path)
         case .lettreMail(let box, let uid): EcranLettreMail(box: box, uid: uid)
         case .ecrireMail(let r): EcranEcrireMail(reponse: r)
