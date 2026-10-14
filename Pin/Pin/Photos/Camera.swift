@@ -13,6 +13,11 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     private let film = AVCaptureMovieFileOutput()
     private var entreeMicro: AVCaptureDeviceInput?
     private var rafaleEnCours = false
+    // Rafale en cours de constitution (touchés uniquement sur la file `file`).
+    private var rafaleOuverte = false
+    private var rafaleFermee = false
+    private var tampon: [Data] = []
+    private var enAttente = 0
     private var minuteurVideo: Timer?
     private let tic = UIImpactFeedbackGenerator(style: .light)
 
@@ -151,23 +156,65 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
         guard mode == .photo, !rafaleEnCours else { return }
         rafaleEnCours = true
         DispatchQueue.main.async { self.compteRafale = 0 }
+        file.async {
+            self.rafaleOuverte = true
+            self.rafaleFermee = false
+            self.tampon = []
+            self.enAttente = 0
+        }
         tirRafale()
     }
 
     func finRafale() {
         guard rafaleEnCours else { return }
         rafaleEnCours = false
-        let n = compteRafale
-        DispatchQueue.main.async {
-            self.compteRafale = 0
-            self.message = "Rafale : \(n) photo\(n > 1 ? "s" : "")"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { self.message = nil }
+        DispatchQueue.main.async { self.compteRafale = 0 }
+        file.async {
+            self.rafaleFermee = true
+            self.terminerRafale()
+        }
+    }
+
+    /// Sur la file caméra : quand toutes les photos de la rafale sont arrivées,
+    /// elles sont enregistrées d'un coup, dans un album « Rafale » daté.
+    private func terminerRafale() {
+        guard rafaleOuverte, rafaleFermee, enAttente == 0 else { return }
+        let photos = tampon
+        rafaleOuverte = false
+        rafaleFermee = false
+        tampon = []
+        guard !photos.isEmpty else { return }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "d MMM HH:mm:ss"
+        let titre = "Rafale \(f.string(from: Date()))"
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { statut in
+            guard statut == .authorized || statut == .limited else {
+                DispatchQueue.main.async { self.message = "Accès à la Pellicule refusé" }
+                return
+            }
+            PHPhotoLibrary.shared().performChanges {
+                let album = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: titre)
+                let marques = photos.compactMap { data -> PHObjectPlaceholder? in
+                    let r = PHAssetCreationRequest.forAsset()
+                    r.addResource(with: .photo, data: data, options: nil)
+                    return r.placeholderForCreatedAsset
+                }
+                album.addAssets(marques as NSArray)
+            } completionHandler: { ok, _ in
+                DispatchQueue.main.async {
+                    let n = photos.count
+                    self.message = ok ? "Rafale de \(n) photo\(n > 1 ? "s" : "") dans l'album « \(titre) »" : "Enregistrement impossible"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.message = nil }
+                }
+            }
         }
     }
 
     private func tirRafale() {
         file.async {
-            guard self.rafaleEnCours, self.session.isRunning else { return }
+            guard self.rafaleEnCours, self.session.isRunning, self.tampon.count + self.enAttente < 60 else { return }
+            self.enAttente += 1
             self.prendre(rapide: true)
             DispatchQueue.main.async { self.compteRafale += 1 }
             self.file.asyncAfter(deadline: .now() + 0.15) { self.tirRafale() }
@@ -258,7 +305,20 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
     }
 
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        guard error == nil, let data = photo.fileDataRepresentation() else {
+        let donnees = error == nil ? photo.fileDataRepresentation() : nil
+        file.async {
+            if self.rafaleOuverte {
+                if let donnees { self.tampon.append(donnees) }
+                self.enAttente -= 1
+                self.terminerRafale()
+            } else {
+                self.enregistrer(donnees)
+            }
+        }
+    }
+
+    private func enregistrer(_ donnees: Data?) {
+        guard let data = donnees else {
             DispatchQueue.main.async { self.message = "Prise de vue impossible" }
             return
         }
@@ -271,7 +331,6 @@ final class CameraModele: NSObject, ObservableObject, AVCapturePhotoCaptureDeleg
                 PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
             } completionHandler: { ok, _ in
                 DispatchQueue.main.async {
-                    guard !self.rafaleEnCours else { return }
                     self.message = ok ? "Enregistrée dans la Pellicule" : "Enregistrement impossible"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.message = nil }
                 }
