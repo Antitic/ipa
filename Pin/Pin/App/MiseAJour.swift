@@ -57,17 +57,19 @@ final class MiseAJour: ObservableObject {
         }
     }
 
-    /// Ouvre LiveContainer sur le nouvel IPA ; s'il ne répond pas (Pin installé
-    /// autrement), on ouvre le lien de téléchargement dans Safari.
+    /// Pin tourne DANS LiveContainer, qui refuse d'installer tant qu'il est
+    /// occupé à faire tourner une app (« redémarrer LiveContainer »). Donc :
+    /// on ouvre dans Safari la page de mise à jour du serveur Pin, puis Pin se
+    /// ferme, ce qui ferme LiveContainer. La page relance LiveContainer avec
+    /// l'adresse de la nouvelle version : il l'installe aussitôt.
     func installer() {
         guard let v = disponible else { return }
-        var c = URLComponents()
-        c.scheme = "livecontainer"
-        c.host = "install"
-        c.queryItems = [URLQueryItem(name: "url", value: v.ipa.absoluteString)]
-        guard let lien = c.url else { return }
-        UIApplication.shared.open(lien) { ok in
-            if !ok { UIApplication.shared.open(v.ipa) }
+        var c = URLComponents(string: "https://pin.dipherant.xyz/maj")!
+        c.queryItems = [URLQueryItem(name: "v", value: v.numero)]
+        guard let page = c.url else { return }
+        UIApplication.shared.open(page) { ok in
+            guard ok else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { exit(0) }
         }
     }
 
