@@ -3,11 +3,12 @@ import SwiftUI
 /// Les écrans de l'iPod. Un seul est affiché : celui du haut de la pile.
 enum Ecran: Hashable {
     case menu
-    case musique, enLecture, coverFlow
+    case musique, enLecture, coverFlow, ajoutMusique
     case whatsapp, liaisonWhatsApp
     case conversation(jid: String, nom: String)
     case stickers(jid: String)
     case vuPar(id: String)
+    case audioWhatsApp(jid: String)
     case imageWhatsApp(id: String)
     case photos, camera, pellicule
     case photo(index: Int)
@@ -16,7 +17,8 @@ enum Ecran: Hashable {
     case discussionClaude(uuid: String, nom: String)
     case connexionClaude
     case reglages, connexion, telegram
-    case mail, skins
+    case mail, skins, meteo, jeux, brick, musicQuiz
+    case meteoJour(index: Int)
     case boiteMail(path: String, nom: String)
     case lettreMail(box: String, uid: Int)
     case ecrireMail(reponse: ReponseMail?)
@@ -26,12 +28,14 @@ enum Ecran: Hashable {
         case .menu: return "Pin"
         case .musique: return "Musique"
         case .coverFlow: return "Cover Flow"
+        case .ajoutMusique: return "Ajouter"
         case .enLecture: return "En lecture"
         case .whatsapp, .liaisonWhatsApp: return "WhatsApp"
         case .conversation(_, let nom): return nom
         case .imageWhatsApp: return "Photo"
         case .stickers: return "Stickers"
         case .vuPar: return "Infos du message"
+        case .audioWhatsApp: return "Envoyer un morceau"
         case .photos: return "Photos"
         case .camera: return "Appareil photo"
         case .pellicule: return "Pellicule"
@@ -45,6 +49,11 @@ enum Ecran: Hashable {
         case .telegram: return "Telegram"
         case .mail: return "Mail"
         case .skins: return "Skin"
+        case .meteo: return "Météo"
+        case .meteoJour: return "Météo"
+        case .jeux: return "Jeux"
+        case .brick: return "Brick"
+        case .musicQuiz: return "Music Quiz"
         case .boiteMail(_, let nom): return nom.isEmpty ? "Mail" : nom
         case .lettreMail: return "Lettre"
         case .ecrireMail(let r): return r == nil ? "Nouveau message" : "Réponse"

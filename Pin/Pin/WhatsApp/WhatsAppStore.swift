@@ -262,6 +262,20 @@ final class WhatsAppStore: ObservableObject {
         if let m = try? API.decodeur.decode(MessageWA.self, from: data) { ajouter([m], a: jid) }
     }
 
+    /// Un fichier audio (pas un vocal) : depuis Fichiers, ou un morceau de Musique.
+    func envoyerAudio(fichier: Data? = nil, nom: String = "", musique: String? = nil, a jid: String) async throws {
+        let provisoire = MessageWA(id: "envoi-\(UUID().uuidString)", jid: jid, deMoi: true, auteur: nil,
+                                   type: "audio", texte: nom.isEmpty ? "Audio" : nom, duree: nil,
+                                   timestamp: Date().timeIntervalSince1970 * 1000)
+        ajouter([provisoire], a: jid)
+        defer { messages[jid]?.removeAll { $0.id == provisoire.id } }
+        var chemin = "/api/whatsapp/discussions/\(API.segment(jid))/audio"
+        if let musique { chemin += "?musique=\(API.segment(musique))" }
+        else { chemin += "?nom=" + (nom.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "audio") }
+        let data = try await API.requete(chemin, methode: "POST", corps: fichier ?? Data(), type: "application/octet-stream", delai: 300)
+        if let m = try? API.decodeur.decode(MessageWA.self, from: data) { ajouter([m], a: jid) }
+    }
+
     func envoyerVocal(_ m4a: Data, duree: Double, a jid: String) async throws {
         let chemin = "/api/whatsapp/discussions/\(API.segment(jid))/vocal?duree=\(Int(duree.rounded()))"
         let data = try await API.requete(chemin, methode: "POST", corps: m4a, type: "audio/mp4", delai: 120)

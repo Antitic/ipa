@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import PhotosUI
 import AVFoundation
 
@@ -116,6 +117,8 @@ struct EcranConversation: View {
     @State private var idSaisie = UUID()
     @State private var choixPhoto: PhotosPickerItem?
     @State private var choixOuvert = false
+    @State private var choixAudio = false
+    @State private var menuAudio = false
 
     private var liste: [MessageWA] { whatsapp.messages[jid] ?? [] }
 
@@ -173,6 +176,13 @@ struct EcranConversation: View {
             barreSaisie
         }
         .photosPicker(isPresented: $choixOuvert, selection: $choixPhoto, matching: .images)
+        .fileImporter(isPresented: $choixAudio, allowedContentTypes: [.audio]) { r in
+            guard case .success(let url) = r, case let (data, nom)? = lireFichierChoisi(url) else { return }
+            etat.erreur = nil
+            Task {
+                do { try await whatsapp.envoyerAudio(fichier: data, nom: nom, a: jid) } catch { etat.erreur = error.localizedDescription }
+            }
+        }
         .onChange(of: choixPhoto) { _, item in
             guard let item else { return }
             Task { await envoyerPhoto(item) }
@@ -210,6 +220,12 @@ struct EcranConversation: View {
             }
             Button { nav.ouvrir(.stickers(jid: jid)) } label: {
                 Image(systemName: "face.smiling").font(.system(size: 19)).foregroundStyle(Color(white: 0.4))
+            }
+            Menu {
+                Button { nav.ouvrir(.audioWhatsApp(jid: jid)) } label: { Label("Un morceau de Musique", systemImage: "music.note") }
+                Button { choixAudio = true } label: { Label("Un fichier audio (Fichiers)", systemImage: "folder") }
+            } label: {
+                Image(systemName: "music.note.list").font(.system(size: 18)).foregroundStyle(Color(white: 0.4))
             }
             ZoneSaisie(id: idSaisie, titre: "Message", texte: $etat.texte) { envoyerTexte() }
             if !etat.texte.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -779,5 +795,38 @@ struct EcranVuPar: View {
         }
         return ElementListe(id: l.nom, titre: l.nom, detail: detail.trimmingCharacters(in: .whitespaces),
                             badge: l.niveau >= 3 ? "✓✓" : nil, chevron: false)
+    }
+}
+
+
+/// Choisir un morceau de Musique (profil Telegram) à envoyer dans la discussion.
+struct EcranAudioWhatsApp: View {
+    let jid: String
+    @EnvironmentObject var nav: Navigateur
+    @EnvironmentObject var whatsapp: WhatsAppStore
+    @State private var morceaux: [Morceau]?
+    @State private var erreur: String?
+
+    var body: some View {
+        Group {
+            if let erreur, morceaux == nil {
+                MessageEcran(icone: "music.note", texte: "Musique indisponible", detail: erreur)
+            } else if let morceaux {
+                EcranListe(cle: .audioWhatsApp(jid: jid),
+                           elements: morceaux.map { ElementListe(id: $0.id, titre: $0.titre, detail: $0.artiste, chevron: false) },
+                           vide: "Aucun morceau sur ton profil.") { e in
+                    let cible = jid
+                    let store = whatsapp
+                    let titre = e.titre
+                    nav.retour()
+                    Task { try? await store.envoyerAudio(nom: titre, musique: e.id, a: cible) }
+                }
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            do { morceaux = try await API.get("/api/musique", [Morceau].self) } catch { erreur = error.localizedDescription }
+        }
     }
 }

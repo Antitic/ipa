@@ -20,14 +20,18 @@ struct EcranMorceaux: View {
                 MessageEcran(icone: "exclamationmark.triangle", texte: "Musique indisponible", detail: erreur)
                     .roue { g in g.centre = { Task { await charger() } } }
             } else if let morceaux {
-                let aleatoire: [ElementListe] = morceaux.isEmpty ? [] : [
+                let aleatoire: [ElementListe] = [ElementListe(id: "__ajout", titre: "Ajouter des morceaux…")] + (morceaux.isEmpty ? [] : [
                     ElementListe(id: "__coverflow", titre: "Cover Flow"),
                     ElementListe(id: "__aleatoire", titre: "Lecture aléatoire", detail: "ou secoue l'iPhone", chevron: false),
-                ]
+                ])
                 let pistes: [ElementListe] = morceaux.map { ElementListe(id: $0.id, titre: $0.titre, detail: $0.artiste, chevron: false) }
                 let elements = aleatoire + pistes
                 EcranListe(cle: .musique, elements: elements,
                            vide: "Aucun morceau épinglé sur ton profil Telegram.") { e in
+                    if e.id == "__ajout" {
+                        nav.ouvrir(.ajoutMusique)
+                        return
+                    }
                     if e.id == "__coverflow" {
                         nav.ouvrir(.coverFlow)
                         return
@@ -44,6 +48,7 @@ struct EcranMorceaux: View {
             }
         }
         .task { await charger() }
+        .onAppear { Task { await charger() } }
     }
 
     private func charger() async {
@@ -139,6 +144,21 @@ struct EcranEnLecture: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .rotation3DEffect(.degrees(12), axis: (x: 0, y: 1, z: 0))
         .shadow(color: .black.opacity(0.2), radius: 3, y: 2)
+        .contextMenu {
+            if let m = lecteur.courant {
+                Button(role: .destructive) {
+                    Task {
+                        struct R: Decodable { let ok: Bool }
+                        do {
+                            _ = try await API.post("/api/telegram/profil/retirer", ["id": m.id], R.self)
+                            lecteur.erreur = "« \(m.titre) » retiré de ton profil."
+                        } catch {
+                            lecteur.erreur = error.localizedDescription
+                        }
+                    }
+                } label: { Label("Retirer du profil Telegram", systemImage: "minus.circle") }
+            }
+        }
     }
 
     private var barreTemps: some View {

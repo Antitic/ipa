@@ -15,6 +15,8 @@ struct MenuPrincipal: View {
             ElementListe(id: "mail", titre: "Mail", badge: courrier.nonLus > 0 ? "\(courrier.nonLus)" : nil),
             ElementListe(id: "photos", titre: "Photos"),
             ElementListe(id: "claude", titre: "Claude"),
+            ElementListe(id: "meteo", titre: "Météo"),
+            ElementListe(id: "jeux", titre: "Jeux"),
             ElementListe(id: "reglages", titre: "Réglages"),
         ]
         if lecteur.courant != nil {
@@ -32,6 +34,8 @@ struct MenuPrincipal: View {
             case "photos": nav.ouvrir(.photos)
             case "mail": nav.ouvrir(.mail)
             case "claude": nav.ouvrir(.claude)
+            case "meteo": nav.ouvrir(.meteo)
+            case "jeux": nav.ouvrir(.jeux)
             case "reglages": nav.ouvrir(.reglages)
             default: nav.ouvrir(.enLecture)
             }
