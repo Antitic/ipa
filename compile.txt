@@ -1,0 +1,45 @@
+run: 38541245596  commit: 202ada528f1244042b3a84d360f32a8ec390f814  statut: success
+
+/Users/runner/work/ipa/ipa/Pin/Pin/WhatsApp/Audio.swift:10:89: warning: 'allowBluetooth' was deprecated in iOS 8.0: renamed to 'AVAudioSession.CategoryOptions.allowBluetoothHFP'
+
+---- fin du log ----
+
+Ld /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Pin normal (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0 -isysroot /Applications/Xcode_26.3.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk -Os -L/Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/EagerLinkingTBDs/Release-iphoneos -L/Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos -F/Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/EagerLinkingTBDs/Release-iphoneos -F/Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos -filelist /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin_lto.o -Xlinker -dependency_info -Xlinker /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphoneos -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin.swiftmodule @/Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin-linker-args.resp -o /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Pin
+
+CopySwiftLibs /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Pin --scan-folder /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Frameworks --scan-folder /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/PlugIns --scan-folder /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/SystemExtensions --scan-folder /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Extensions --platform iphoneos --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.3.7003.10.cnHQNL/Metal.xctoolchain --toolchain /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.3.7003.10.cnHQNL/Metal.xctoolchain --module-name Pin --sdk-root /Applications/Xcode_26.3.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk --xcode-version 17C529 --platform-family iOS --deployment-target 17.0 --bundle-identifier com.antitic.pin --output /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app --target-triple arm64-apple-ios17.0 --binary-file /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Pin --dependency-file /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin_dependency_info.dat --stringsdata-file /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin.SwiftFileList --metadata-file-list /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Pin.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Pin.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Objects-normal/arm64/Pin.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-14 09:18:59.087 appintentsmetadataprocessor[3264:12868] Starting appintentsmetadataprocessor export
+2026-10-14 09:18:59.095 appintentsmetadataprocessor[3264:12868] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+GenerateDSYMFile /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app.dSYM /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Pin (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Pin -o /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app.dSYM
+
+AppIntentsSSUTraining (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    /Applications/Xcode_26.3.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Info.plist --temp-dir-path /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/ssu --bundle-id com.antitic.pin --product-path /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app --extracted-metadata-path /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app/Metadata.appintents --metadata-file-list /Users/runner/work/ipa/ipa/Pin/build/Build/Intermediates.noindex/Pin.build/Release-iphoneos/Pin.build/Pin.DependencyMetadataFileList --archive-ssu-assets
+2026-10-14 09:18:59.140 appintentsnltrainingprocessor[3266:12870] Parsing options for appintentsnltrainingprocessor
+2026-10-14 09:18:59.141 appintentsnltrainingprocessor[3266:12870] No AppShortcuts found - Skipping.
+
+RegisterExecutionPolicyException /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    builtin-RegisterExecutionPolicyException /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app
+
+Validate /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    builtin-validationUtility /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app (in target 'Pin' from project 'Pin')
+    cd /Users/runner/work/ipa/ipa/Pin
+    /usr/bin/touch -c /Users/runner/work/ipa/ipa/Pin/build/Build/Products/Release-iphoneos/Pin.app
+
+** BUILD SUCCEEDED **
+
