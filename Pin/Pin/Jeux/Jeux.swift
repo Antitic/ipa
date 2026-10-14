@@ -6,13 +6,25 @@ struct MenuJeux: View {
     @EnvironmentObject var nav: Navigateur
     @AppStorage("record.brick") private var recordBrick = 0
     @AppStorage("record.quiz") private var recordQuiz = 0
+    @AppStorage("record.parachute") private var recordParachute = 0
+    @AppStorage("record.solitaire") private var victoires = 0
+    @AppStorage("record.snake") private var recordSnake = 0
 
     var body: some View {
         EcranListe(cle: .jeux, elements: [
             ElementListe(id: "brick", titre: "Brick", detail: recordBrick > 0 ? "Record : \(recordBrick)" : nil),
             ElementListe(id: "quiz", titre: "Music Quiz", detail: recordQuiz > 0 ? "Record : \(recordQuiz)/10" : "Devine le morceau"),
+            ElementListe(id: "parachute", titre: "Parachute", detail: recordParachute > 0 ? "Record : \(recordParachute)" : nil),
+            ElementListe(id: "solitaire", titre: "Solitaire", detail: victoires > 0 ? "\(victoires) victoire\(victoires > 1 ? "s" : "")" : nil),
+            ElementListe(id: "snake", titre: "Snake", detail: recordSnake > 0 ? "Record : \(recordSnake)" : nil),
         ]) { e in
-            nav.ouvrir(e.id == "brick" ? .brick : .musicQuiz)
+            switch e.id {
+            case "brick": nav.ouvrir(.brick)
+            case "quiz": nav.ouvrir(.musicQuiz)
+            case "parachute": nav.ouvrir(.parachute)
+            case "solitaire": nav.ouvrir(.solitaire)
+            default: nav.ouvrir(.snake)
+            }
         }
     }
 }

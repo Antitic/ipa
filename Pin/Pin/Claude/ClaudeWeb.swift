@@ -142,6 +142,15 @@ final class ClaudeWeb: NSObject, ObservableObject, WKNavigationDelegate {
             },
             quitter: {
                 w.evaluateJavaScript("document.activeElement && document.activeElement.blur();", completionHandler: nil)
+            },
+            deplacer: { n in
+                w.callAsyncJavaScript("""
+                var e = document.activeElement;
+                if (e && typeof e.selectionStart === 'number') {
+                  var p = Math.max(0, Math.min(e.value.length, e.selectionStart + n));
+                  e.setSelectionRange(p, p);
+                }
+                """, arguments: ["n": n], in: nil, in: .page, completionHandler: nil)
             }))
     }
 

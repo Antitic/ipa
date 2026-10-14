@@ -236,6 +236,9 @@ final class SaisieTactile: ObservableObject {
     private struct Doigt {
         var id: Int
         var valide = false
+        /// Appui long sur espace : x de référence du trackpad.
+        var curseurX: CGFloat?
+        var x: CGFloat = 0
     }
     private var doigts: [ObjectIdentifier: Doigt] = [:]
     private var minuteurs: [ObjectIdentifier: Task<Void, Never>] = [:]
@@ -311,12 +314,24 @@ final class SaisieTactile: ObservableObject {
             }
         }
         guard let id = touche(en: p) else { return }
-        doigts[cle] = Doigt(id: id)
+        doigts[cle] = Doigt(id: id, x: p.x)
         enfoncees.insert(id)
         appuyer(cle, id: id)
     }
 
     func deplacement(_ cle: ObjectIdentifier, en p: CGPoint) {
+        // Trackpad : un caractère tous les 9 pt, comme glisser sur l'espace d'iOS.
+        if var d = doigts[cle], let ref = d.curseurX {
+            let pas = Int((p.x - ref) / 9)
+            if pas != 0 {
+                clavier?.deplacerCurseur(pas)
+                d.curseurX = ref + CGFloat(pas) * 9
+                doigts[cle] = d
+                if haptique { UISelectionFeedbackGenerator().selectionChanged() }
+            }
+            return
+        }
+        doigts[cle]?.x = p.x
         guard var d = doigts[cle], !d.valide, let place = places[safe: d.id] else { return }
         if idAccents == d.id, !accents.isEmpty {
             // Glisser pour choisir l'accent : le premier est centré à 22 pt du
@@ -343,11 +358,16 @@ final class SaisieTactile: ObservableObject {
     }
 
     func fin(_ cle: ObjectIdentifier) {
-        if let d = doigts[cle], !d.valide { valider(cle) }
+        if let d = doigts[cle], d.curseurX != nil {
+            withAnimation(.easeOut(duration: 0.15)) { clavier?.modeCurseur = false }
+        } else if let d = doigts[cle], !d.valide {
+            valider(cle)
+        }
         liberer(cle)
     }
 
     func annulation(_ cle: ObjectIdentifier) {
+        if doigts[cle]?.curseurX != nil { clavier?.modeCurseur = false }
         liberer(cle)
     }
 
@@ -389,6 +409,19 @@ final class SaisieTactile: ObservableObject {
                     n += 1
                     try? await Task.sleep(for: .milliseconds(n > 20 ? 45 : 85))
                 }
+            }
+        case .espace:
+            Son.touche()
+            minuteurs[cle] = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(380))
+                guard let self, !Task.isCancelled, var d = self.doigts[cle], !d.valide,
+                      self.places[safe: d.id]?.touche == .espace else { return }
+                d.valide = true
+                d.curseurX = d.x
+                self.doigts[cle] = d
+                self.enfoncees.remove(d.id)
+                if self.haptique { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+                withAnimation(.easeOut(duration: 0.15)) { self.clavier?.modeCurseur = true }
             }
         case .emoji:
             Son.touche()
@@ -520,7 +553,8 @@ struct VueTouche: View {
                 .shadow(color: .black.opacity(0.3), radius: 0, y: 1)
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(Color.black.opacity(0.1), lineWidth: 0.5)
-            etiquette
+            // Mode curseur : les touches se vident, comme le trackpad d'iOS.
+            etiquette.opacity(clavier.modeCurseur ? 0 : 1)
         }
         .frame(width: largeur, height: hauteur)
         .overlay(alignment: .bottom) {
@@ -532,6 +566,7 @@ struct VueTouche: View {
     // MARK: Apparence
 
     private var fond: Color {
+        if clavier.modeCurseur { return Color(white: 0.84) }
         if case .retour = touche {
             return enfoncee ? Color(white: 0.98) : Color(red: 0.2, green: 0.47, blue: 0.96)
         }

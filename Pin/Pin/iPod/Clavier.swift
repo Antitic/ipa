@@ -15,6 +15,10 @@ final class Clavier: ObservableObject {
     @Published var maj: Maj = .aucune
     @Published var couche: Couche = .lettres
     @Published private(set) var libelleRetour = "retour"
+    /// Position du curseur, comptée depuis la fin du texte (0 = à la fin).
+    @Published private(set) var depuisFin = 0
+    /// Vrai pendant l'appui long sur la barre d'espace (trackpad).
+    @Published var modeCurseur = false
     /// Page affichée dans la couche emojis (0 = récents).
     @Published var pageEmoji = 0
     @Published private(set) var emojisRecents: [String] = UserDefaults.standard.stringArray(forKey: "emojisRecents") ?? []
@@ -43,8 +47,8 @@ final class Clavier: ObservableObject {
     func taperEmoji(_ e: String) {
         if let web {
             web.inserer(e)
-        } else if let cible {
-            cible.wrappedValue += e
+        } else if cible != nil {
+            avant += e
         }
         var r = emojisRecents.filter { $0 != e }
         r.insert(e, at: 0)
@@ -62,6 +66,7 @@ final class Clavier: ObservableObject {
         let effacer: () -> Void
         let valider: () -> Void
         let quitter: () -> Void
+        var deplacer: (Int) -> Void = { _ in }
     }
     private var web: CibleWeb?
     /// Ce qui a été tapé dans la page web depuis le dernier espace (pour la prédiction).
@@ -86,6 +91,7 @@ final class Clavier: ObservableObject {
     func ouvrir(champ id: UUID, texte: Binding<String>, type: TypeClavier, libelleRetour: String, retour: (() -> Void)?) {
         web = nil
         cible = texte
+        depuisFin = 0
         self.retour = retour
         self.type = type
         self.libelleRetour = libelleRetour
@@ -115,7 +121,34 @@ final class Clavier: ObservableObject {
     /// Le début du mot en cours, juste avant le curseur.
     var fragment: String {
         if web != nil { return tamponWeb }
-        return Predicteur.motCourant(cible?.wrappedValue ?? "")
+        return Predicteur.motCourant(avant)
+    }
+
+    /// Le texte avant le curseur ; l'écrire modifie seulement cette partie.
+    private var avant: String {
+        get {
+            guard let t = cible?.wrappedValue else { return "" }
+            return String(t.dropLast(min(depuisFin, t.count)))
+        }
+        set {
+            guard let cible else { return }
+            let t = cible.wrappedValue
+            cible.wrappedValue = newValue + String(t.suffix(min(depuisFin, t.count)))
+        }
+    }
+
+    /// Déplace le curseur de n caractères (négatif = vers la gauche).
+    func deplacerCurseur(_ n: Int) {
+        if let web {
+            tamponWeb = ""
+            web.deplacer(n)
+            return
+        }
+        guard let t = cible?.wrappedValue else { return }
+        let nouveau = min(max(depuisFin - n, 0), t.count)
+        guard nouveau != depuisFin else { return }
+        depuisFin = nouveau
+        if maj == .une { maj = .aucune }
     }
 
     // MARK: - Saisie
@@ -128,8 +161,8 @@ final class Clavier: ObservableObject {
             if maj == .une { maj = .aucune }
             return
         }
-        guard let cible else { return }
-        cible.wrappedValue += car
+        guard cible != nil else { return }
+        avant += car
         if maj == .une { maj = .aucune }
         if [".", "!", "?"].contains(s) { majAuto() }
     }
@@ -141,16 +174,16 @@ final class Clavier: ObservableObject {
             if couche != .lettres { couche = .lettres }
             return
         }
-        guard let cible else { return }
+        guard cible != nil else { return }
         // Double espace = point, comme sur iOS.
         let maintenant = Date()
-        if type == .texte, maintenant.timeIntervalSince(dernierEspace) < 0.45, cible.wrappedValue.hasSuffix(" "),
-           let avant = cible.wrappedValue.dropLast().last, avant.isLetter || avant.isNumber {
-            cible.wrappedValue.removeLast()
-            cible.wrappedValue += ". "
+        let a = avant
+        if type == .texte, maintenant.timeIntervalSince(dernierEspace) < 0.45, a.hasSuffix(" "),
+           let precedent = a.dropLast().last, precedent.isLetter || precedent.isNumber {
+            avant = String(a.dropLast()) + ". "
             dernierEspace = .distantPast
         } else {
-            cible.wrappedValue += " "
+            avant = a + " "
             dernierEspace = maintenant
         }
         if couche != .lettres { couche = .lettres }
@@ -163,8 +196,9 @@ final class Clavier: ObservableObject {
             web.effacer()
             return
         }
-        guard let cible, !cible.wrappedValue.isEmpty else { return }
-        cible.wrappedValue.removeLast()
+        let a = avant
+        guard cible != nil, !a.isEmpty else { return }
+        avant = String(a.dropLast())
         majAuto()
     }
 
@@ -183,8 +217,8 @@ final class Clavier: ObservableObject {
             web.valider()
         } else if let retour {
             retour()
-        } else if let cible, type == .texte {
-            cible.wrappedValue += "\n"
+        } else if cible != nil, type == .texte {
+            avant += "\n"
         } else {
             fermer()
         }
@@ -193,7 +227,8 @@ final class Clavier: ObservableObject {
     /// Majuscule automatique en début de phrase (texte seulement).
     private func majAuto() {
         guard maj != .verrou else { return }
-        guard type == .texte, let t = cible?.wrappedValue else { maj = .aucune; return }
+        guard type == .texte, cible != nil else { maj = .aucune; return }
+        let t = avant
         let fin = t.trimmingCharacters(in: .whitespaces)
         if t.isEmpty || fin.isEmpty || t.hasSuffix("\n") ||
             (t.hasSuffix(" ") && [".", "!", "?"].contains(fin.last.map(String.init) ?? "")) {
@@ -222,7 +257,7 @@ struct ChampIPod: View {
 
     var body: some View {
         TexteAvecCurseur(texte: secret ? String(repeating: "•", count: texte.count) : texte,
-                         titre: titre, actif: actif, lignes: 1)
+                         titre: titre, actif: actif, lignes: 1, depuisFin: actif ? clavier.depuisFin : 0)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -253,7 +288,7 @@ struct ZoneSaisie: View {
     private var actif: Bool { clavier.actif && clavier.champ == id }
 
     var body: some View {
-        TexteAvecCurseur(texte: texte, titre: titre, actif: actif, lignes: 4)
+        TexteAvecCurseur(texte: texte, titre: titre, actif: actif, lignes: 4, depuisFin: actif ? clavier.depuisFin : 0)
             .font(.system(size: 13))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -277,16 +312,20 @@ struct TexteAvecCurseur: View {
     let titre: String
     let actif: Bool
     let lignes: Int
+    var depuisFin = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { contexte in
-            let visible = actif && Int(contexte.date.timeIntervalSinceReferenceDate * 2) % 2 == 0
+            // Pendant un déplacement du curseur, il reste allumé (comme iOS).
+            let visible = actif && (depuisFin > 0 || Int(contexte.date.timeIntervalSinceReferenceDate * 2) % 2 == 0)
             let curseur = Text("|").foregroundColor(Color(red: 0.16, green: 0.44, blue: 0.86).opacity(visible ? 1 : 0))
+            let n = min(depuisFin, texte.count)
             Group {
                 if texte.isEmpty {
                     (actif ? curseur : Text("")) + Text(titre).foregroundColor(Color(white: 0.6))
                 } else {
-                    Text(texte).foregroundColor(.black) + (actif ? curseur : Text(""))
+                    Text(String(texte.dropLast(n))).foregroundColor(.black) + (actif ? curseur : Text(""))
+                        + Text(String(texte.suffix(n))).foregroundColor(.black)
                 }
             }
             .font(.system(size: 14))

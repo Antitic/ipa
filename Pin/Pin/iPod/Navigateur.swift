@@ -17,7 +17,9 @@ enum Ecran: Hashable {
     case discussionClaude(uuid: String, nom: String)
     case connexionClaude
     case reglages, connexion, telegram
-    case mail, skins, meteo, jeux, brick, musicQuiz
+    case mail, skins, meteo, jeux, brick, musicQuiz, parachute, solitaire, snake
+    case notes, horloge, chrono, minuteur
+    case note(id: UUID)
     case meteoJour(index: Int)
     case boiteMail(path: String, nom: String)
     case lettreMail(box: String, uid: Int)
@@ -54,6 +56,13 @@ enum Ecran: Hashable {
         case .jeux: return "Jeux"
         case .brick: return "Brick"
         case .musicQuiz: return "Music Quiz"
+        case .parachute: return "Parachute"
+        case .solitaire: return "Solitaire"
+        case .snake: return "Snake"
+        case .notes, .note: return "Notes"
+        case .horloge: return "Horloge"
+        case .chrono: return "Chronomètre"
+        case .minuteur: return "Minuteur"
         case .boiteMail(_, let nom): return nom.isEmpty ? "Mail" : nom
         case .lettreMail: return "Lettre"
         case .ecrireMail(let r): return r == nil ? "Nouveau message" : "Réponse"
