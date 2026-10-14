@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.11.2"
-    CURRENT_PROJECT_VERSION: "19"
+    MARKETING_VERSION: "1.12.0"
+    CURRENT_PROJECT_VERSION: "20"
 targets:
   Pin:
     type: application
@@ -34,6 +34,7 @@ targets:
         NSCameraUsageDescription: Pin prend des photos avec l'appareil photo de l'iPhone.
         NSPhotoLibraryUsageDescription: Pin affiche ta Pellicule et envoie des photos sur WhatsApp.
         NSPhotoLibraryAddUsageDescription: Pin enregistre les photos prises dans ta Pellicule.
+        NSLocationWhenInUseUsageDescription: Pin affiche la météo là où tu te trouves.
         NSMicrophoneUsageDescription: Pin enregistre tes vocaux WhatsApp et la dictée.
         NSSpeechRecognitionUsageDescription: Pin transforme ta voix en texte pour écrire tes messages.
     settings:

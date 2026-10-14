@@ -1,6 +1,7 @@
 import SwiftUI
+import CoreLocation
 
-/// Météo de Saint-Maur-des-Fossés (Open-Meteo, sans compte ni clé).
+/// Météo à l'endroit où tu es (Open-Meteo, sans compte ni clé).
 struct PrevisionMeteo: Decodable {
     struct Actuel: Decodable {
         let temperature_2m: Double
@@ -25,6 +26,7 @@ struct PrevisionMeteo: Decodable {
         let sunrise: [String]
         let sunset: [String]
     }
+    let timezone: String?
     let current: Actuel
     let hourly: Heures
     let daily: Jours
@@ -55,25 +57,94 @@ enum CodeMeteo {
     }
 }
 
+/// Position de l'iPhone, une seule fois par demande.
+@MainActor
+final class Localisation: NSObject, CLLocationManagerDelegate {
+    private let gestionnaire = CLLocationManager()
+    private var attente: CheckedContinuation<CLLocation?, Never>?
+
+    func position() async -> CLLocation? {
+        gestionnaire.delegate = self
+        gestionnaire.desiredAccuracy = kCLLocationAccuracyKilometer
+        let statut = gestionnaire.authorizationStatus
+        if statut == .denied || statut == .restricted { return nil }
+        return await withCheckedContinuation { c in
+            terminer(nil)
+            attente = c
+            if statut == .notDetermined { gestionnaire.requestWhenInUseAuthorization() } else { gestionnaire.requestLocation() }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(12))
+                self.terminer(nil)
+            }
+        }
+    }
+
+    private func terminer(_ l: CLLocation?) {
+        attente?.resume(returning: l)
+        attente = nil
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let st = manager.authorizationStatus
+        Task { @MainActor in
+            if st == .authorizedWhenInUse || st == .authorizedAlways {
+                if self.attente != nil { manager.requestLocation() }
+            } else if st == .denied || st == .restricted {
+                self.terminer(nil)
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        let l = locations.last
+        Task { @MainActor in self.terminer(l) }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in self.terminer(nil) }
+    }
+}
+
 @MainActor
 final class Meteo: ObservableObject {
     static let partage = Meteo()
     @Published private(set) var prevision: PrevisionMeteo?
     @Published private(set) var erreur: String?
+    @Published private(set) var ville = "Ma position"
     private var chargeeLe: Date?
+    private let localisation = Localisation()
 
-    static let ville = "Saint-Maur-des-Fossés"
-    private static let url = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=48.7994&longitude=2.4997"
-        + "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day"
-        + "&hourly=temperature_2m,weather_code,precipitation_probability"
-        + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
-        + "&timezone=Europe%2FParis&forecast_days=7")!
+    /// Repli quand la position est refusée ou introuvable (et jamais connue).
+    private static let repli = (lat: 48.7994, lon: 2.4997, nom: "Saint-Maur-des-Fossés")
 
     func charger(forcer: Bool = false) async {
         if !forcer, let d = chargeeLe, Date().timeIntervalSince(d) < 600, prevision != nil { return }
+        let d = UserDefaults.standard
+        var lat = d.object(forKey: "meteo.lat") as? Double
+        var lon = d.object(forKey: "meteo.lon") as? Double
+        var nom = d.string(forKey: "meteo.ville")
+        if let pos = await localisation.position() {
+            lat = pos.coordinate.latitude
+            lon = pos.coordinate.longitude
+            let lieu = try? await CLGeocoder().reverseGeocodeLocation(pos, preferredLocale: Locale(identifier: "fr_FR")).first
+            nom = lieu?.locality ?? lieu?.subAdministrativeArea ?? lieu?.name ?? "Ma position"
+            d.set(lat, forKey: "meteo.lat"); d.set(lon, forKey: "meteo.lon"); d.set(nom, forKey: "meteo.ville")
+        }
+        let (la, lo, ville) = (lat ?? Self.repli.lat, lon ?? Self.repli.lon, nom ?? Self.repli.nom)
+        let adresse = "https://api.open-meteo.com/v1/forecast?latitude=\(la)&longitude=\(lo)"
+            + "&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day"
+            + "&hourly=temperature_2m,weather_code,precipitation_probability"
+            + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset"
+            + "&timezone=auto&forecast_days=7"
         do {
-            let (data, _) = try await URLSession.shared.data(from: Self.url)
-            prevision = try JSONDecoder().decode(PrevisionMeteo.self, from: data)
+            let (data, _) = try await URLSession.shared.data(from: URL(string: adresse)!)
+            let p = try JSONDecoder().decode(PrevisionMeteo.self, from: data)
+            if let id = p.timezone, let tz = TimeZone(identifier: id) {
+                formatISO.timeZone = tz
+                formatJour.timeZone = tz
+            }
+            prevision = p
+            self.ville = ville
             erreur = nil
             chargeeLe = Date()
         } catch {
@@ -154,7 +225,7 @@ struct EcranMeteo: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(Meteo.ville).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                Text(meteo.ville).font(.system(size: 10, weight: .semibold)).lineLimit(1)
                 Text("Ressenti \(Int(c.apparent_temperature.rounded()))°").font(.system(size: 10))
                 Text("Vent \(Int(c.wind_speed_10m.rounded())) km/h").font(.system(size: 10))
                 Text("Humidité \(Int(c.relative_humidity_2m))%").font(.system(size: 10))
